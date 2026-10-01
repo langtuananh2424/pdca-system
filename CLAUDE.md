@@ -24,7 +24,7 @@ cột, trạng thái, mã lỗi đã thiết kế — không tự đặt lại. 
 kế, nêu rõ và cập nhật tài liệu trong cùng thay đổi.
 
 ## Công nghệ
-Python 3.12 + `uv`; SDK MCP (FastMCP, `stateless_http=True`); `psycopg` v3
+Python 3.12 + `uv`; SDK MCP 2.x (`MCPServer`, `streamable_http_app(stateless_http=True)`); `psycopg` v3
 (pool); `pydantic` v2; PostgreSQL 16 (pgvector từ P2); Flyway; APScheduler +
 khóa advisory Postgres; `httpx`; pytest + Testcontainers; `ruff` + `mypy`;
 Docker Compose + Caddy.
@@ -90,11 +90,11 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 - Mỗi tool mới phải được thêm vào **bộ kiểm thử ma trận quyền**
   (`tests/permission_matrix/`, tham số hóa từ LLD bảng 3.2).
 - Thay đổi chạm tới prompt/phân tích trả lời: thêm ca prompt injection.
-- Chạy trước khi coi là xong: `ruff check`, `mypy`, `pytest`.
+- Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 
 ## Trạng thái hiện tại
-Mới có tài liệu thiết kế v0.1 (nháp) và khung thư mục; chưa có code. Bước
-tiếp theo: LLD mục 12 bước 1 — `pyproject.toml` với `uv`, CI, Docker Compose
+Đã có tài liệu thiết kế v0.1 (nháp), khung thư mục, `pyproject.toml` + `uv.lock`. Bước
+còn lại của LLD mục 12 bước 1: CI (GitHub Actions), Docker Compose
 cục bộ.
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM

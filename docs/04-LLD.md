@@ -20,7 +20,7 @@
 | Hạng mục | Lựa chọn | Ghi chú |
 |---|---|---|
 | Python | 3.12 | quản lý bằng `uv` |
-| SDK MCP | `mcp[cli]` (FastMCP), khóa phiên bản trong `uv.lock` | `stateless_http=True` |
+| SDK MCP | `mcp[cli]` 2.x (`MCPServer`; bản 1.x gọi là `FastMCP`), khóa phiên bản trong `uv.lock` | `streamable_http_app(stateless_http=True, json_response=True)` |
 | DB driver | `psycopg[binary,pool]` (v3) | |
 | Xác thực dữ liệu | `pydantic` v2 | lược đồ tool, cấu hình project |
 | CSDL | PostgreSQL 16, `pgvector` từ P2 | |
@@ -353,7 +353,7 @@ Hàm `can(ctx, action, resource)` thực hiện: (1) quyền theo vai trò từ 
 
 ## 4. Đặc tả MCP tool (P1)
 
-Server: `FastMCP("pdca", stateless_http=True, json_response=True)`, endpoint mặc định `/mcp`. Mọi tool nhận người gọi từ `UserContext`.
+Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app(stateless_http=True, json_response=True)`, endpoint mặc định `/mcp`. Mọi tool nhận người gọi từ `UserContext`.
 
 ### 4.1 Quy ước chung
 
@@ -446,10 +446,11 @@ Server: `FastMCP("pdca", stateless_http=True, json_response=True)`, endpoint m�
 
 ```python
 # apps/mcp_server/server.py  (thiết kế tham khảo, đối chiếu API SDK hiện hành)
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from pdca_core import services
 
-mcp = FastMCP("pdca", stateless_http=True, json_response=True)
+mcp = MCPServer("pdca")
+app = mcp.streamable_http_app(stateless_http=True, json_response=True)
 
 @mcp.tool()
 async def get_my_tasks(status: str | None = None, project_id: int | None = None,
@@ -472,7 +473,7 @@ async def submit_report(project_id: int, done: str, blockers: str = "",
 
 `run_tool` bao: đo thời gian, bắt ngoại lệ → mã lỗi chuẩn, cắt kích thước đầu ra, ghi `audit_log` (ok/denied/error), gắn `request_id` vào log.
 
-`current_context()` lấy token từ header `Authorization` của request hiện tại; cách truy cập header trong SDK phải đối chiếu tài liệu SDK đang dùng (có thể qua middleware ASGI trước FastMCP).
+`current_context()` lấy token từ header `Authorization` của request hiện tại; cách truy cập header trong SDK phải đối chiếu tài liệu SDK đang dùng (SDK 2.x có sẵn tham số `token_verifier` và `middleware` của `MCPServer`, cần đánh giá trước khi tự viết middleware ASGI).
 
 ## 5. Agent Service
 

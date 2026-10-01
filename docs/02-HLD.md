@@ -111,7 +111,7 @@ flowchart TB
 
 | Mã | Thành phần | Trách nhiệm | Công nghệ chính | Pha |
 |---|---|---|---|---|
-| C-01 | MCP Server | Cổng MCP: xác thực, định tuyến tool, trả dữ liệu theo quyền | Python 3.12, SDK MCP (FastMCP), ASGI | P1 |
+| C-01 | MCP Server | Cổng MCP: xác thực, định tuyến tool, trả dữ liệu theo quyền | Python 3.12, SDK MCP 2.x (`MCPServer`), ASGI | P1 |
 | C-02 | Lớp nghiệp vụ dùng chung | Quy tắc nghiệp vụ, phân quyền, truy cập dữ liệu, audit | Gói Python nội bộ `pdca_core` | P1 |
 | C-03 | PostgreSQL | Lưu dữ liệu có cấu trúc, `jsonb`, vector (pgvector từ P2) | PostgreSQL 16 | P1 |
 | C-04 | Flyway | Migration schema có phiên bản | Flyway (Docker) | P1 |

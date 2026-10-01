@@ -1,0 +1,62 @@
+[project]
+name = "pdca-system"
+version = "0.1.0"
+description = "Hệ thống Trợ lý AI phân cấp theo chu trình PDCA"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mcp[cli]>=2.2,<3",
+    "psycopg[binary,pool]>=3.2",
+    "pydantic>=2.7",
+    "apscheduler>=3.10,<4",
+    "httpx>=0.27",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "testcontainers[postgres]>=4.7",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pdca_core", "src/adapters", "src/apps"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # cho phép ký tự tiếng Việt trong chuỗi/comment
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pdca_core", "adapters", "apps"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["pdca_core", "adapters", "apps"]
+strict = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+markers = [
+    "integration: cần Docker (Testcontainers Postgres)",
+]
