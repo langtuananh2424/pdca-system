@@ -248,6 +248,18 @@ def test_outbox_sends_retries_and_gives_up(app_pool: ConnectionPool) -> None:
         "MCP test",
     )
 
+    # V5: tin lỗi tạm thời chờ ~1 phút mới thử lại, không bị gửi lại ngay.
+    waited = _sql(
+        app_pool,
+        "select next_attempt_at - now() from outbound_messages where id = %s",
+        flaky_id,
+    )[0][0]
+    assert timedelta(seconds=50) < waited <= timedelta(minutes=1)
+    calls = len(fake.sent)
+    outbox.send_pending(app_pool, {channel: fake}, max_attempts=2)
+    assert len(fake.sent) == calls and _status(app_pool, flaky_id) == ("failed", 1, None)
+
+    _sql(app_pool, "update outbound_messages set next_attempt_at = now() where id = %s", flaky_id)
     fake.results = [SendResult(ok=False, error_kind="transient")]
     assert outbox.send_pending(app_pool, {channel: fake}, max_attempts=2).dead == 1
     assert _status(app_pool, flaky_id) == ("dead", 2, None)

@@ -1,13 +1,14 @@
 """Gửi hàng đợi `outbound_messages` qua kênh (LLD 5.1 `outbox/sender`, SDD 4.10 tin nhắn).
 
-queued → sent; lỗi tạm thời → failed (lần chạy sau thử lại); hết lượt hoặc lỗi
-vĩnh viễn → dead. Dòng được khóa `for update skip locked` trong lúc gửi để hai
-bộ gửi chạy song song không gửi trùng.
+queued → sent; lỗi tạm thời → failed, thử lại sau khoảng giãn cách
+(`RETRY_DELAYS`); hết lượt hoặc lỗi vĩnh viễn → dead. Dòng được khóa
+`for update skip locked` trong lúc gửi để hai bộ gửi song song không gửi trùng.
 """
 
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 
 from psycopg_pool import ConnectionPool
 
@@ -15,6 +16,19 @@ from pdca_core.outreach.ports import ChannelSender, OutboundMessage, SendResult
 from pdca_core.repositories import outreach as repo
 
 logger = logging.getLogger("pdca.outbox")
+
+# Giãn cách sau lần lỗi thứ 1, 2, 3, ≥4 (V5). Với 5 lượt: tổng ~1h20 trước khi `dead`.
+RETRY_DELAYS = (
+    timedelta(minutes=1),
+    timedelta(minutes=5),
+    timedelta(minutes=15),
+    timedelta(hours=1),
+)
+
+
+def retry_delay(attempts_done: int) -> timedelta:
+    """Khoảng chờ trước lần thử kế tiếp khi đã thử `attempts_done` lần (≥ 1)."""
+    return RETRY_DELAYS[min(attempts_done, len(RETRY_DELAYS)) - 1]
 
 
 @dataclass(frozen=True)
@@ -59,7 +73,12 @@ def send_pending(
                 sent += 1
                 continue
             is_dead = result.error_kind == "permanent" or msg.attempts + 1 >= max_attempts
-            repo.mark_failed(conn, msg.id, dead=is_dead)
+            repo.mark_failed(
+                conn,
+                msg.id,
+                dead=is_dead,
+                retry_after=None if is_dead else retry_delay(msg.attempts + 1),
+            )
             logger.warning(
                 "send failed",
                 extra={

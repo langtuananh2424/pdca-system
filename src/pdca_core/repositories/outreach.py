@@ -6,7 +6,7 @@ múi giờ khác — LLD 11).
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from psycopg import Connection
@@ -183,6 +183,7 @@ def claim_pending(
             select id, user_id, channel, kind, payload, attempts, dedupe_key
             from outbound_messages
             where status in ('queued', 'failed') and attempts < %s and channel = any(%s)
+              and (next_attempt_at is null or next_attempt_at <= now())
             order by id
             limit %s
             for update skip locked
@@ -207,8 +208,13 @@ def mark_sent(conn: Connection[Any], message_id: int, external_id: str | None) -
     )
 
 
-def mark_failed(conn: Connection[Any], message_id: int, *, dead: bool) -> None:
+def mark_failed(
+    conn: Connection[Any], message_id: int, *, dead: bool, retry_after: timedelta | None = None
+) -> None:
+    """Lỗi gửi: `dead`, hoặc `failed` và chỉ thử lại sau `retry_after` (V5 `next_attempt_at`)."""
     conn.execute(
-        "update outbound_messages set status = %s, attempts = attempts + 1 where id = %s",
-        ("dead" if dead else "failed", message_id),
+        "update outbound_messages set status = %s, attempts = attempts + 1,"
+        " next_attempt_at = case when %s::interval is null then null else now() + %s end"
+        " where id = %s",
+        ("dead" if dead else "failed", retry_after, retry_after, message_id),
     )

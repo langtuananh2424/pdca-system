@@ -614,6 +614,15 @@ Kênh thật (email) làm sau (OI-01); phần dưới chạy với kênh `log` (
 - **`run_job`** (SDD 4.11.7): chèn `job_runs` (`on conflict do nothing` → `duplicate`), `pg_try_advisory_lock(hashtextextended('pdca_job:'||job, 0))` (không lấy được → `skipped`), chạy, ghi `succeeded`/`failed` + `detail` (lỗi chỉ ghi tên lớp ngoại lệ).
 - **Outbox**: mỗi `OUTBOX_INTERVAL_SECONDS` lấy tối đa 50 tin `queued`/`failed` của các kênh đang cấu hình, `attempts < OUTBOX_MAX_ATTEMPTS`, `for update skip locked`; thành công → `sent` + `external_id` + `sent_at`; lỗi tạm thời (kể cả adapter ném ngoại lệ) → `failed`, lần chạy sau thử lại; lỗi vĩnh viễn, hết lượt, hoặc người nhận đã khóa → `dead`. Kênh phải mang `outbound_messages.id` để ghép trả lời (6.2).
 
+### 5.9 Kênh email — phần gửi (P1 bước 8b)
+
+- `adapters/channels/email_channel.py` (`CHANNEL_KIND=email`), `smtplib` chuẩn; một kết nối SMTP mỗi thư (P1 vài chục thư/ngày). `SMTP_SECURITY`: `starttls` (mặc định, cổng 587), `ssl` (465), `none` (25, chỉ dev).
+- Header: `Message-ID` = `make_msgid("pdca-{outbound_messages.id}", tên miền của SMTP_FROM)` — lưu vào `outbound_messages.external_id` để luồng nhận ghép `In-Reply-To`/`References`; `X-PDCA-Outbound-Id`, `X-PDCA-Kind`; `Auto-Submitted: auto-generated` (RFC 3834, tránh thư trả lời tự động quay lại); `Reply-To` nếu có `SMTP_REPLY_TO` (hộp thư sẽ đọc khi làm phần nhận).
+- Phân loại lỗi: người nhận bị từ chối toàn 5xx, phản hồi SMTP 5xx, địa chỉ sai cú pháp → `permanent` (`dead`); 4xx, mất kết nối, timeout → `transient`; lỗi đăng nhập (535) coi là `transient` (lỗi cấu hình — sửa xong tin còn lại vẫn gửi được).
+- **V5** `outbound_messages.next_attempt_at`: lỗi tạm thời chờ 1 → 5 → 15 → 60 phút giữa các lần thử (`outbox.RETRY_DELAYS`); với `OUTBOX_MAX_ATTEMPTS=5` khoảng 1 giờ 20 trước khi `dead`.
+- Dev: Compose profile `mail` chạy Mailpit (SMTP giả, giao diện `http://localhost:8025`); test tích hợp gửi thật qua Mailpit bằng Testcontainers.
+- Chưa làm: nhận trả lời (IMAP/webhook), phân tích trả lời (cần LLM — OI-04).
+
 ## 6. Giao diện bên ngoài của Agent Service
 
 ### 6.1 `LLMClient`
@@ -753,7 +762,8 @@ Dự kiến dùng hook của Claude Code khi kết thúc phiên để gợi ý g
 | `LLM_API_KEY` | agent | Khóa API, lấy từ kho bí mật |
 | `LLM_MODEL_SMALL/MEDIUM/LARGE` | agent | Tên model theo mức |
 | `LLM_MONTHLY_BUDGET_USD` | agent | Hạn mức tháng |
-| `CHANNEL_KIND` | agent, scheduler | `log` (dev, chỉ ghi log) hoặc `email` (sau) |
+| `CHANNEL_KIND` | agent, scheduler | `log` (dev, chỉ ghi log) hoặc `email` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_REPLY_TO`, `SMTP_TIMEOUT_SECONDS` | scheduler | Kênh email (5.9); mật khẩu chỉ ở biến môi trường/kho bí mật |
 | `CHANNEL_CREDENTIALS` | agent | Thông tin kênh |
 | `RULES_REPO_URL`, `RULES_REF` | agent | Kho rule và nhánh/thẻ |
 | `TZ_DEFAULT` | scheduler | `Asia/Bangkok` |

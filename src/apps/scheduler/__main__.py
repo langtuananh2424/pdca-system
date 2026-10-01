@@ -7,6 +7,7 @@ Agent Service (nhận/phân tích trả lời) thêm khi có kênh thật.
 """
 
 import logging
+import os
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -70,7 +71,7 @@ def make_runner(
 def main() -> None:
     json_logging.configure()
     settings = Settings.from_env()
-    sender = build_channel(settings.channel_kind)
+    sender = build_channel(settings.channel_kind, os.environ)
     tz = ZoneInfo(settings.timezone)
 
     with ConnectionPool(settings.database_url, min_size=2, max_size=4, open=True) as pool:

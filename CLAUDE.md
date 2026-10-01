@@ -117,8 +117,9 @@ sửa `rules/` rồi chạy `uv run pdca-admin rules build` (LLD 7.5). Đủ too
 của LLD 4.2. Bước tiếp theo theo LLD 12: bước 8 — adapter kênh + outbox + job
 nhắc việc: đã xong phần không phụ thuộc kênh (LLD 5.8 — `pdca_core/outreach`,
 `job_runner.run_job`, `apps/scheduler` chạy trong Compose với kênh `log`, V4
-`reports.source = 'system'`). Còn lại: adapter email + nhận/phân tích trả lời
-(Agent Service, cần chốt LLM — OI-04).
+`reports.source = 'system'`) và gửi email qua SMTP (LLD 5.9, V5 giãn cách thử
+lại, Mailpit cho dev: Compose profile `mail`). Còn lại: nhận + phân tích trả
+lời (Agent Service, cần chốt LLM — OI-04).
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09).
