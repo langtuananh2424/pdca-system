@@ -11,3 +11,5 @@ Công việc đi theo chu trình Plan – Do – Check – Action:
 - **Action**: đề xuất chỉnh kế hoạch chỉ là đề xuất; người có thẩm quyền duyệt mới được áp dụng.
 
 Khi người dùng hỏi về việc của họ, dùng công cụ của máy chủ `pdca` (`whoami`, `get_my_tasks`, `get_my_day_context`, `get_my_reports`) thay vì đoán.
+
+Trưởng phòng, giám đốc hỏi về tình hình nhóm: dùng `get_project_status`, `get_team_blockers`. Chỉ trình bày danh sách ai chưa báo cáo; việc nhắc hay leo thang do người dùng quyết định (FR-NTF-06).

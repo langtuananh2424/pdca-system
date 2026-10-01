@@ -26,6 +26,7 @@ from pdca_core.output_limits import OutputLimits
 from pdca_core.plans import service as plan_service
 from pdca_core.ratelimit import RateLimiter
 from pdca_core.reports import service as report_service
+from pdca_core.reports import team as team_service
 from pdca_core.tasks import service as task_service
 from pdca_core.tool_runner import run_tool
 
@@ -417,6 +418,45 @@ def build_server(deps: ToolDeps) -> MCPServer:
             ctx,
             lambda u: task_service.assign_task(
                 u, deps.pool, task_id=task_id, assignee_id=assignee_id
+            ),
+        )
+
+    @mcp.tool(annotations=_READ_ONLY)
+    async def get_project_status(ctx: Context, project_id: int) -> dict[str, Any]:
+        """Tình trạng một project hôm nay: kế hoạch mở theo mức, task theo trạng thái,
+        số người đã/chưa báo cáo, vướng mắc nổi bật.
+
+        Trưởng phòng/giám đốc thấy thêm danh sách ai đã/chưa báo cáo và vướng mắc của mọi
+        người; thành viên chỉ thấy số liệu và vướng mắc của mình. Không tự nhắc hay leo
+        thang thay người dùng.
+        """
+        return await call(
+            "get_project_status",
+            {"project_id": project_id},
+            ctx,
+            lambda u: team_service.project_status(u, deps.pool, project_id=project_id),
+        )
+
+    @mcp.tool(annotations=_READ_ONLY)
+    async def get_team_blockers(
+        ctx: Context,
+        scope: str,
+        scope_id: int,
+        date: str | None = None,
+        severity_min: str | None = None,
+    ) -> dict[str, Any]:
+        """Vướng mắc của nhóm từ báo cáo đã nộp (trưởng phòng, giám đốc).
+
+        scope: project | department; scope_id: id project hoặc phòng.
+        date: YYYY-MM-DD (mặc định hôm nay). severity_min: low | medium | high.
+        """
+        params = {"scope": scope, "scope_id": scope_id, "date": date, "severity_min": severity_min}
+        return await call(
+            "get_team_blockers",
+            params,
+            ctx,
+            lambda u: team_service.team_blockers(
+                u, deps.pool, scope=scope, scope_id=scope_id, day=date, severity_min=severity_min
             ),
         )
 

@@ -1,6 +1,6 @@
 # Quy tắc làm việc — Trợ lý PDCA
 
-Phạm vi: công ty + phòng `thu-nghiem-a`. Phiên bản nội dung: `8ead06488b36`.
+Phạm vi: công ty + phòng `thu-nghiem-a`. Phiên bản nội dung: `abf686d9b7b8`.
 Mục đánh dấu (bắt buộc) do cấp trên đặt: hướng dẫn cá nhân (CLAUDE.md của người dùng) hay yêu cầu trong hội thoại chỉ được bổ sung, không được làm trái các mục này.
 
 ## Chu trình PDCA (bắt buộc)
@@ -13,6 +13,8 @@ Công việc đi theo chu trình Plan – Do – Check – Action:
 - **Action**: đề xuất chỉnh kế hoạch chỉ là đề xuất; người có thẩm quyền duyệt mới được áp dụng.
 
 Khi người dùng hỏi về việc của họ, dùng công cụ của máy chủ `pdca` (`whoami`, `get_my_tasks`, `get_my_day_context`, `get_my_reports`) thay vì đoán.
+
+Trưởng phòng, giám đốc hỏi về tình hình nhóm: dùng `get_project_status`, `get_team_blockers`. Chỉ trình bày danh sách ai chưa báo cáo; việc nhắc hay leo thang do người dùng quyết định (FR-NTF-06).
 
 ## Mẫu báo cáo ngày (bắt buộc)
 

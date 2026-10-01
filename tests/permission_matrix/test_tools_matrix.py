@@ -18,6 +18,7 @@ from pdca_core.errors import ForbiddenOrNotFound
 from pdca_core.org import service as org_service
 from pdca_core.plans import service as plan_service
 from pdca_core.reports import service as report_service
+from pdca_core.reports import team as team_service
 from pdca_core.repositories.tokens import PgTokenRepository
 from pdca_core.tasks import service as task_service
 
@@ -40,6 +41,8 @@ class World:
     outsider: int  # thành viên project B (phòng B)
     plan_a: int  # kế hoạch của peer trong project A
     plan_b: int  # kế hoạch của outsider trong project B
+    dept_a: int
+    dept_b: int
 
 
 @pytest.fixture(scope="module")
@@ -91,11 +94,32 @@ def world(app_pool: ConnectionPool) -> World:
         plan_a = plan(peer, a)
         plan_b = plan(outsider, b)
 
+        def dept_of(project: int) -> int:
+            row = conn.execute(
+                "select department_id from projects where id = %s", (project,)
+            ).fetchone()
+            return int(row[0])  # type: ignore[index]
+
+        dept_a, dept_b = dept_of(a), dept_of(b)
+
     callers = {
         role: authenticate(issue_token(tokens, uid).token, tokens, "matrix")
         for role, uid in ids.items()
     }
-    return World(callers, own_task, peer_task, a, b, task_in_b, peer, outsider, plan_a, plan_b)
+    return World(
+        callers,
+        own_task,
+        peer_task,
+        a,
+        b,
+        task_in_b,
+        peer,
+        outsider,
+        plan_a,
+        plan_b,
+        dept_a,
+        dept_b,
+    )
 
 
 def _version(pool: ConnectionPool, plan_id: int) -> int:
@@ -266,6 +290,43 @@ CASES: list[tuple[str, str, Call, set[str]]] = [
         lambda c, p, w, r: task_service.assign_task(
             c, p, task_id=w.task_in_b, assignee_id=w.outsider
         ),
+        {"director"},
+    ),
+    # --- Mức nhóm (UC-06): get_project_status, get_team_blockers
+    (
+        "get_project_status",
+        "member_project",
+        lambda c, p, w, r: team_service.project_status(c, p, project_id=w.project_a),
+        set(ROLES),  # LLD 4.2: thành viên project (mọi vai trò), trưởng phòng, giám đốc
+    ),
+    (
+        "get_project_status",
+        "project_other_department",
+        lambda c, p, w, r: team_service.project_status(c, p, project_id=w.project_b),
+        {"director"},
+    ),
+    (
+        "get_team_blockers",
+        "project_same_department",
+        lambda c, p, w, r: team_service.team_blockers(c, p, scope="project", scope_id=w.project_a),
+        {"dept_head", "director"},  # T-02: staff bị từ chối
+    ),
+    (
+        "get_team_blockers",
+        "department_own",
+        lambda c, p, w, r: team_service.team_blockers(c, p, scope="department", scope_id=w.dept_a),
+        {"dept_head", "director"},
+    ),
+    (
+        "get_team_blockers",
+        "project_other_department",
+        lambda c, p, w, r: team_service.team_blockers(c, p, scope="project", scope_id=w.project_b),
+        {"director"},  # T-03
+    ),
+    (
+        "get_team_blockers",
+        "department_other",
+        lambda c, p, w, r: team_service.team_blockers(c, p, scope="department", scope_id=w.dept_b),
         {"director"},
     ),
 ]

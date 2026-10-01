@@ -481,6 +481,11 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
 - `create_task`: quyền `task.create` theo phòng của project; người nhận phải là thành viên đang hoạt động của project (`invalid_argument`); `plan_id` phải cùng project, chưa đóng, `due_date` nằm trong kế hoạch. Ghi `task_events` (`null → todo`, ghi chú `created`).
 - `assign_task`: quyền `task.assign`; task `done/cancelled` → `conflict`; giao cho chính người đang nhận trả `changed: false`. Lịch sử ghi vào `task_events` (trạng thái giữ nguyên, ghi chú `reassigned: <cũ> -> <mới>`).
 
+#### Ghi chú cài đặt — `get_project_status`, `get_team_blockers`
+- Chỉ dữ liệu từ báo cáo `submitted` (bất biến 7): báo cáo `draft_by_agent` không tính là đã báo cáo, vướng mắc trong đó không hiển thị. "Hôm nay" theo `users.timezone` của người gọi.
+- `get_project_status`: quyền đúng như mục trên (thành viên project — kể cả vai trò nào —, `dept_head` của phòng chứa project, `director`). `reports_today` = `{date, submitted, not_reported, away}` (số đếm; `away` là thành viên có `away_until` ≥ hôm nay và chưa nộp). Người có `report.read.team` trên phạm vi nhận thêm `submitted_members`, `not_reported_members`, `away_members` (FR-NTF-06: chỉ hiển thị). `top_blockers` (≤ 10, nặng trước) gồm vướng mắc của mọi người nếu có `blockers.read.team`, ngược lại chỉ của chính người gọi. `plans_open_by_level` tính kế hoạch `draft`/`active`.
+- `get_team_blockers`: `blockers.read.team` trên `Resource(project_id, department_id)` của project hoặc `Resource(department_id)` của phòng; phòng/project không tồn tại → `forbidden_or_not_found`. Đầu ra `{date, items: [{report_id, report_date, user_id, user_name, project: {id, name}, kind, severity, text}]}`, sắp mức độ giảm dần, ≤ 100 dòng (`truncated`).
+
 ### 4.3 Khung cài đặt tool (tham khảo)
 
 ```python

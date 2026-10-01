@@ -106,16 +106,16 @@ sai cũng được audit (xem LLD 4.3). MCP Server (`adapters/mcp/server.py`,
 `update_task_status`, `log_activity`, `get_my_day_context`, `submit_report`,
 `get_my_reports` (quy tắc create/append/replace: LLD 4.2 ghi chú bước 5),
 `list_plans`, `get_plan`, `create_plan`, `update_plan`, `create_task`,
-`assign_task` (phạm vi kế hoạch: LLD 4.2 ghi chú bước 7); đọc token qua `Context.headers` của SDK
+`assign_task` (phạm vi kế hoạch: LLD 4.2 ghi chú bước 7), `get_project_status`,
+`get_team_blockers` (chỉ báo cáo `submitted`); đọc token qua `Context.headers` của SDK
 `mcp` 2.2, không dùng `token_verifier`. Ma trận quyền mức tool ở
 `tests/permission_matrix/test_tools_matrix.py`; fixture DB dùng chung ở
 `tests/db_fixtures.py`, gọi MCP qua HTTP ở `tests/mcp_helpers.py`. Plugin
 Claude Code ở `plugin/` (marketplace `.claude-plugin/marketplace.json`): skill
 `/pdca:chot-ngay`, `/pdca:viec-cua-toi`, hook SessionStart nạp rule ghép sẵn —
-sửa `rules/` rồi chạy `uv run pdca-admin rules build` (LLD 7.5). Còn thiếu
-trong LLD 4.2 (P1): `get_project_status`, `get_team_blockers` (T-02). Bước
-tiếp theo theo LLD 12: bước 8 — adapter kênh + outbox + job nhắc việc (chờ
-OI-01 chốt kênh).
+sửa `rules/` rồi chạy `uv run pdca-admin rules build` (LLD 7.5). Đủ tool P1
+của LLD 4.2. Bước tiếp theo theo LLD 12: bước 8 — adapter kênh + outbox + job
+nhắc việc (chờ OI-01 chốt kênh).
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09).
