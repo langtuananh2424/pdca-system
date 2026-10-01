@@ -445,6 +445,14 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
 - `decide_action`: `proposal_id`, `decision: "approve"|"reject"`, `note?` → nếu `approve` gọi `apply` (SDD 4.11.6).
 - `search_docs`: `query`, `k ≤ 10` → đoạn kèm nguồn, đã lọc ACL.
 
+#### Ghi chú cài đặt (P1 bước 4)
+- Tham số tool khai báo kiểu rộng (`str`, `int`) và được kiểm tra trong `pdca_core` (`validation.py`) để mọi đầu vào sai đều đi qua `run_tool` và có audit. Sai kiểu JSON cơ bản (ví dụ chuỗi cho `int`) vẫn bị SDK chặn trước, không có audit.
+- Lỗi trả về là `isError` với văn bản `<mã>` hoặc `<mã>: <chi tiết>`; SDK thêm tiền tố `Error executing tool <tên>: `.
+- `whoami.department` là `{id, name}` hoặc `null`.
+- `get_my_tasks`: sắp theo `due_date` (không hạn xếp cuối) rồi `id`; `next_cursor` là khóa keyset mã hóa base64url; `cancelled` không lọc được (theo danh sách trạng thái ở trên).
+- `update_task_status`: kiểm tra quyền trước, rồi mới kiểm tra chuyển trạng thái — task của người khác hay không tồn tại đều là `forbidden_or_not_found`. Khóa dòng (`for update`) trong giao dịch, ghi `task_events`. `task.update.own` chỉ cho task giao cho chính mình, kể cả với trưởng phòng/giám đốc.
+- `log_activity`: `source` do nơi gọi đặt (MCP luôn `user`), không phải tham số của model; `task_id` (nếu có) phải thuộc cùng `project_id`; `summary` rỗng → `invalid_argument`, dài hơn 2000 ký tự bị cắt.
+
 ### 4.3 Khung cài đặt tool (tham khảo)
 
 ```python
@@ -682,6 +690,9 @@ Dự kiến dùng hook của Claude Code khi kết thúc phiên để gợi ý g
 | `TZ_DEFAULT` | scheduler | `Asia/Bangkok` |
 | `RATE_LIMIT_PER_MIN` | mcp | Giới hạn theo người dùng |
 | `OUTPUT_MAX_ROWS`, `OUTPUT_MAX_BYTES` | mcp | Giới hạn đầu ra |
+| `MCP_HOST`, `MCP_PORT` | mcp | Địa chỉ lắng nghe (mặc định `127.0.0.1:8000`; container dùng `0.0.0.0`) |
+| `MCP_ALLOWED_HOSTS` | mcp | Danh sách `Host` hợp lệ, phân tách dấu phẩy, hỗ trợ `tên:*` — chống DNS rebinding của SDK; phải gồm tên miền Caddy chuyển tiếp |
+| `DB_POOL_MAX` | mcp | Kích thước tối đa pool kết nối (mặc định 10) |
 
 ### 8.2 Cấu hình project (`projects.config`)
 

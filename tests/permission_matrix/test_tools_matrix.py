@@ -1,0 +1,158 @@
+"""Ma trận quyền mức tool (LLD 3.2 + mục "Quyền" của từng tool ở LLD 4.2).
+
+Mỗi tool mới phải thêm ca vào đây. Gọi thẳng hàm nghiệp vụ với `UserContext`
+dựng từ token thật trên DB thật, cho mọi vai trò × quan hệ với tài nguyên.
+"""
+
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+import pytest
+from psycopg_pool import ConnectionPool
+
+from pdca_core.authz.context import UserContext
+from pdca_core.authz.tokens import authenticate, issue_token
+from pdca_core.errors import ForbiddenOrNotFound
+from pdca_core.org import service as org_service
+from pdca_core.repositories.tokens import PgTokenRepository
+from pdca_core.tasks import service as task_service
+
+pytestmark = pytest.mark.integration
+
+ROLES = ("staff", "dept_head", "director", "admin")
+
+
+@dataclass(frozen=True)
+class World:
+    """Người gọi (mỗi vai trò, thành viên project A) và tài nguyên quanh họ."""
+
+    callers: dict[str, UserContext]
+    own_task: dict[str, int]
+    peer_task: int  # task của đồng nghiệp cùng project A
+    project_a: int
+    project_b: int  # caller không phải thành viên
+    task_in_b: int
+
+
+@pytest.fixture(scope="module")
+def world(app_pool: ConnectionPool) -> World:
+    tokens = PgTokenRepository(app_pool)
+    with app_pool.connection() as conn:
+        a, b = (
+            int(conn.execute("select id from projects where name = %s", (n,)).fetchone()[0])  # type: ignore[index]
+            for n in ("Dự án thử nghiệm A", "Dự án thử nghiệm B")
+        )
+
+        def user(role: str, project: int) -> int:
+            row = conn.execute(
+                """
+                with u as (
+                  insert into users (name, email, role, department_id)
+                  select 'matrix', %s, %s, department_id from projects where id = %s
+                  returning id)
+                insert into project_members (project_id, user_id) select %s, id from u
+                returning user_id
+                """,
+                (f"{uuid.uuid4().hex[:12]}@test.invalid", role, project, project),
+            ).fetchone()
+            return int(row[0])  # type: ignore[index]
+
+        def task(assignee: int, project: int) -> int:
+            row = conn.execute(
+                "insert into tasks (project_id, assignee_id, created_by, title)"
+                " values (%s, %s, %s, 'matrix') returning id",
+                (project, assignee, assignee),
+            ).fetchone()
+            return int(row[0])  # type: ignore[index]
+
+        ids = {role: user(role, a) for role in ROLES}
+        peer = user("staff", a)
+        outsider = user("staff", b)
+        own_task = {role: task(uid, a) for role, uid in ids.items()}
+        peer_task = task(peer, a)
+        task_in_b = task(outsider, b)
+
+    callers = {
+        role: authenticate(issue_token(tokens, uid).token, tokens, "matrix")
+        for role, uid in ids.items()
+    }
+    return World(callers, own_task, peer_task, a, b, task_in_b)
+
+
+Call = Callable[[UserContext, ConnectionPool, World, str], Any]
+
+# (tool, tình huống, hàm gọi, các vai trò được phép)
+CASES: list[tuple[str, str, Call, set[str]]] = [
+    ("whoami", "self", lambda c, p, w, r: org_service.whoami(c, p), set(ROLES)),
+    (
+        "get_my_tasks",
+        "own",
+        lambda c, p, w, r: task_service.list_mine(c, p),
+        {"staff", "dept_head", "director"},
+    ),
+    (
+        "update_task_status",
+        "own_task",
+        lambda c, p, w, r: task_service.update_status(
+            c, p, task_id=w.own_task[r], status="in_progress"
+        ),
+        {"staff", "dept_head", "director"},
+    ),
+    (
+        "update_task_status",
+        "peer_task_same_project",
+        lambda c, p, w, r: task_service.update_status(
+            c, p, task_id=w.peer_task, status="in_progress"
+        ),
+        set(),  # "own": kể cả trưởng phòng, giám đốc cũng không sửa task người khác qua tool này
+    ),
+    (
+        "update_task_status",
+        "task_other_project",
+        lambda c, p, w, r: task_service.update_status(
+            c, p, task_id=w.task_in_b, status="in_progress"
+        ),
+        set(),
+    ),
+    (
+        "log_activity",
+        "member_project",
+        lambda c, p, w, r: task_service.log_activity(c, p, project_id=w.project_a, summary="ok"),
+        set(ROLES),  # quyền là "thành viên project", không theo vai trò
+    ),
+    (
+        "log_activity",
+        "non_member_project",
+        lambda c, p, w, r: task_service.log_activity(c, p, project_id=w.project_b, summary="x"),
+        set(),
+    ),
+    (
+        "log_activity",
+        "task_of_other_project",
+        lambda c, p, w, r: task_service.log_activity(
+            c, p, project_id=w.project_a, summary="x", task_id=w.task_in_b
+        ),
+        set(),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("call", "role", "allowed"),
+    [
+        pytest.param(call, role, role in allowed, id=f"{tool}-{situation}-{role}")
+        for tool, situation, call, allowed in CASES
+        for role in ROLES
+    ],
+)
+def test_tool_permission(
+    world: World, app_pool: ConnectionPool, call: Call, role: str, allowed: bool
+) -> None:
+    ctx = world.callers[role]
+    if allowed:
+        call(ctx, app_pool, world, role)
+    else:
+        with pytest.raises(ForbiddenOrNotFound):
+            call(ctx, app_pool, world, role)

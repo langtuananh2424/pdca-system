@@ -94,16 +94,20 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 - Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 
 ## Trạng thái hiện tại
-Xong LLD mục 12 bước 1–3: khung dự án, CI, Docker Compose cục bộ (`deploy/`;
+Xong LLD mục 12 bước 1–4: khung dự án, CI, Docker Compose cục bộ (`deploy/`;
 dịch vụ ứng dụng nằm trong profile `apps` cho tới khi có entrypoint);
 `V1__core.sql`, `V2__role_grants.sql`, seed dev; khung bảo mật trong
 `pdca_core`: `errors`, `authz` (context, policy/`can`, tokens), `audit`,
 `tool_runner.run_tool`, `output_limits`, `ratelimit`, repository Postgres;
 `pdca-admin token issue|revoke`. Login + mật khẩu vai trò DB tạo ở
 `deploy/initdb/`, không trong migration. `run_tool` tự xác thực để token
-sai cũng được audit (xem LLD 4.3). Bước tiếp theo: bước 4 — adapter MCP
-(đọc header Bearer, đối chiếu SDK `mcp` 2.2) + tool `whoami`, `get_my_tasks`,
-`update_task_status`, `log_activity`.
+sai cũng được audit (xem LLD 4.3). MCP Server (`adapters/mcp/server.py`,
+`python -m apps.mcp_server`) có tool `whoami`, `get_my_tasks`,
+`update_task_status`, `log_activity`; đọc token qua `Context.headers` của SDK
+`mcp` 2.2, không dùng `token_verifier`. Ma trận quyền mức tool ở
+`tests/permission_matrix/test_tools_matrix.py`; fixture DB dùng chung ở
+`tests/db_fixtures.py`. Bước tiếp theo: bước 5 — `get_my_day_context`,
+`submit_report`, `get_my_reports`.
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09).

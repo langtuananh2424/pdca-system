@@ -31,6 +31,10 @@ docker compose -f deploy/docker-compose.yml up -d
 ```
 
 Lệnh trên dựng PostgreSQL 16 và chạy Flyway. Thêm `--profile apps --build` để
-dựng mcp/agent/scheduler/Caddy (khi đã có entrypoint).
+dựng MCP Server + Caddy (`https://localhost/mcp`). Cấp token:
+
+```bash
+docker compose -f deploy/docker-compose.yml exec mcp pdca-admin token issue --email staff.a1@example.com
+```
 
 Lộ trình cài đặt P1: LLD mục 12.

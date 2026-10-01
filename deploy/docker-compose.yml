@@ -3,7 +3,8 @@
 #   cp deploy/.env.example deploy/.env      # rồi đặt mật khẩu
 #   docker compose -f deploy/docker-compose.yml up -d            # db + flyway
 #   docker compose -f deploy/docker-compose.yml --profile apps up -d --build
-# Dịch vụ ứng dụng nằm trong profile "apps" vì entrypoint chưa được cài đặt.
+# Profile "apps": mcp + proxy (Caddy). Profile "workers": agent, scheduler
+# (chưa có entrypoint — LLD 12 bước 8).
 name: pdca
 
 x-app: &app
@@ -65,9 +66,19 @@ services:
   mcp:
     <<: *app
     command: ["python", "-m", "apps.mcp_server"]
+    environment:
+      <<: *app-env
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8000"
+      # Host mà Caddy chuyển tiếp (tên miền công khai) — chống DNS rebinding của SDK.
+      MCP_ALLOWED_HOSTS: ${PDCA_DOMAIN:-localhost},${PDCA_DOMAIN:-localhost}:*,localhost:*
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-60}
+      OUTPUT_MAX_ROWS: ${OUTPUT_MAX_ROWS:-100}
+      OUTPUT_MAX_BYTES: ${OUTPUT_MAX_BYTES:-51200}
 
   agent:
     <<: *app
+    profiles: [workers]
     command: ["python", "-m", "apps.agent_service"]
     environment:
       <<: *app-env
@@ -84,6 +95,7 @@ services:
 
   scheduler:
     <<: *app
+    profiles: [workers]
     command: ["python", "-m", "apps.scheduler"]
 
   proxy:

@@ -3,7 +3,7 @@
 import pytest
 from psycopg import errors
 
-from .conftest import ROOT, Conn, Database
+from tests.db_fixtures import ROOT, Conn, Database
 
 pytestmark = pytest.mark.integration
 

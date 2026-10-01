@@ -15,8 +15,7 @@ from pdca_core.errors import ForbiddenOrNotFound, InvalidArgument, Unauthorized
 from pdca_core.repositories.audit import PgAuditRepository
 from pdca_core.repositories.tokens import PgTokenRepository
 from pdca_core.tool_runner import run_tool
-
-from .conftest import Database
+from tests.db_fixtures import Database
 
 pytestmark = pytest.mark.integration
 

@@ -15,7 +15,9 @@ from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
+# Docker lặng lẽ mount thư mục rỗng nếu đường dẫn sai → kiểm tra sớm.
+assert (ROOT / "deploy" / "initdb" / "01-roles.sh").is_file(), ROOT
 POSTGRES_IMAGE = "postgres:16-alpine"  # giữ đồng bộ deploy/docker-compose.yml
 FLYWAY_IMAGE = "flyway/flyway:12-alpine"
 

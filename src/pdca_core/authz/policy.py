@@ -94,3 +94,13 @@ def require(ctx: UserContext, action: Action, resource: Resource) -> None:
     """Như `can` nhưng ném `ForbiddenOrNotFound` khi bị từ chối (LLD 3.3)."""
     if not can(ctx, action, resource):
         raise ForbiddenOrNotFound()
+
+
+def require_project_member(ctx: UserContext, project_id: int) -> None:
+    """Quyền "thành viên project" của LLD 4.2 (`log_activity`, `submit_report`).
+
+    `ctx.project_ids` chỉ gồm project chưa xóa mềm; không phân biệt project
+    không tồn tại với project không phải thành viên.
+    """
+    if project_id not in ctx.project_ids:
+        raise ForbiddenOrNotFound()
