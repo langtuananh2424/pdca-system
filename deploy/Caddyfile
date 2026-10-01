@@ -1,0 +1,6 @@
+# Reverse proxy TLS cho MCP Server (HLD/LLD 9.1).
+# Cục bộ: PDCA_DOMAIN=localhost → Caddy tự cấp chứng chỉ nội bộ.
+{$PDCA_DOMAIN:localhost} {
+	encode gzip
+	reverse_proxy mcp:8000
+}

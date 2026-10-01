@@ -93,9 +93,11 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 - Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 
 ## Trạng thái hiện tại
-Đã có tài liệu thiết kế v0.1 (nháp), khung thư mục, `pyproject.toml` + `uv.lock`. Bước
-còn lại của LLD mục 12 bước 1: CI (GitHub Actions), Docker Compose
-cục bộ.
+Xong LLD mục 12 bước 1: tài liệu thiết kế v0.1 (nháp), khung thư mục,
+`pyproject.toml` + `uv.lock`, CI (GitHub Actions), Docker Compose cục bộ
+(`deploy/`; dịch vụ ứng dụng nằm trong profile `apps` cho tới khi có
+entrypoint). Bước tiếp theo: bước 2 — Flyway V1, grant cho vai trò DB, seed.
+Login + mật khẩu các vai trò DB tạo ở `deploy/initdb/`, không trong migration.
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09).

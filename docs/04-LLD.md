@@ -721,6 +721,8 @@ volumes: { pgdata: {} }
 ```
 Khung này minh họa cấu trúc; mật khẩu, đường dẫn bí mật, mạng, khối lượng sao lưu và cấu hình TLS cần hoàn thiện theo môi trường thực.
 
+Bản cục bộ đã cài đặt: `deploy/docker-compose.yml`. Lệch so với khung: Flyway đăng nhập bằng vai trò `flyway` (chủ sở hữu CSDL); login + mật khẩu của `flyway`, `pdca_app`, `pdca_readonly` tạo bởi `deploy/initdb/01-roles.sh` khi khởi tạo volume, còn quyền trên bảng do migration cấp; mật khẩu lấy từ `deploy/.env` (không commit); mcp/agent/scheduler/proxy thuộc profile `apps`; mcp lắng nghe cổng 8000 sau Caddy.
+
 ### 9.2 Sao lưu và khôi phục
 - `pg_dump` hằng ngày (cron), mã hóa, lưu ngoài máy chủ; giữ 30 bản ngày + 12 bản tháng (cấu hình được).
 - Kiểm thử khôi phục mỗi quý trên môi trường staging (NFR-REL-02).
