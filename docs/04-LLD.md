@@ -279,6 +279,8 @@ create index audit_user_idx on audit_log(user_id, at);
 revoke update, delete, truncate on audit_log from public;
 ```
 
+Migration sau V1: `V3__blockers_soft_delete.sql` thêm `blockers.deleted_at` (+ chỉ mục theo `report_id`) để `submit_report mode=replace` bỏ vướng mắc cũ mà không cần quyền `delete`.
+
 ### 2.3 Vai trò cơ sở dữ liệu
 
 | Vai trò DB | Dùng bởi | Quyền |
@@ -452,6 +454,23 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
 - `get_my_tasks`: sắp theo `due_date` (không hạn xếp cuối) rồi `id`; `next_cursor` là khóa keyset mã hóa base64url; `cancelled` không lọc được (theo danh sách trạng thái ở trên).
 - `update_task_status`: kiểm tra quyền trước, rồi mới kiểm tra chuyển trạng thái — task của người khác hay không tồn tại đều là `forbidden_or_not_found`. Khóa dòng (`for update`) trong giao dịch, ghi `task_events`. `task.update.own` chỉ cho task giao cho chính mình, kể cả với trưởng phòng/giám đốc.
 - `log_activity`: `source` do nơi gọi đặt (MCP luôn `user`), không phải tham số của model; `task_id` (nếu có) phải thuộc cùng `project_id`; `summary` rỗng → `invalid_argument`, dài hơn 2000 ký tự bị cắt.
+
+#### Ghi chú cài đặt (P1 bước 5)
+- "Hôm nay" và ranh giới ngày tính theo `users.timezone` trong Postgres. `report_date` không được ở tương lai (`invalid_argument`); ngày quá khứ được phép (nộp muộn, SDD 4.10).
+- `submit_report` theo báo cáo hiện có (user, project, ngày):
+
+  | Hiện có | `create` | `append` | `replace` |
+  |---|---|---|---|
+  | không có | tạo | tạo | tạo |
+  | `submitted` | `conflict` (gợi ý append/replace) | nối `done`/`blockers`/`schedule_conflicts` (xuống dòng), thêm `blocker_items` | thay nội dung, xóa mềm vướng mắc cũ |
+  | `draft_by_agent`, `not_reported` | thay | thay | thay |
+
+  Nộp lên bản nháp của agent luôn **thay** (không trộn nội dung AI chưa xác nhận — bất biến 6); `source` thành `claude_code`, `confidence` về null.
+- Đầu ra thêm `action: created|appended|replaced`. Báo cáo rỗng → `invalid_argument`; `done` bắt buộc trừ khi `append` vào báo cáo đã nộp. Nối làm trường vượt 2000 ký tự → `invalid_argument` (gợi ý `replace`), không cắt lặng lẽ. Tối đa 20 `blocker_items`.
+- `raw_text_approved` = văn bản ghép từ các trường đã duyệt ("Đã làm: …", "Vướng mắc: …", "- [kind/severity] …", "Xung đột lịch: …").
+- Hai `create` đồng thời: unique (user, project, ngày) + `on conflict do nothing` → một bên tạo, bên kia `conflict`.
+- `get_my_reports`: mọi trạng thái của chính người gọi, khoảng tối đa 93 ngày, ≤ 100 dòng (vượt → `truncated`); mỗi báo cáo kèm `blocker_items` chưa xóa.
+- `get_my_day_context`: quyền `task.read.own` + `report.read.own`; mỗi danh sách ≤ 100 dòng; `tasks_open` là trạng thái hiện tại (không phụ thuộc `date`), `tasks_changed_today` là `task_events` do chính người dùng tạo trong ngày.
 
 ### 4.3 Khung cài đặt tool (tham khảo)
 

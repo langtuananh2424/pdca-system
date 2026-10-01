@@ -24,6 +24,7 @@ from pdca_core.errors import ToolError
 from pdca_core.org import service as org_service
 from pdca_core.output_limits import OutputLimits
 from pdca_core.ratelimit import RateLimiter
+from pdca_core.reports import service as report_service
 from pdca_core.tasks import service as task_service
 from pdca_core.tool_runner import run_tool
 
@@ -153,6 +154,83 @@ def build_server(deps: ToolDeps) -> MCPServer:
             ctx,
             lambda u: task_service.log_activity(
                 u, deps.pool, project_id=project_id, summary=summary, task_id=task_id
+            ),
+        )
+
+    @mcp.tool(annotations=_READ_ONLY)
+    async def get_my_day_context(ctx: Context, date: str | None = None) -> dict[str, Any]:
+        """Dữ liệu trong ngày của người dùng để soạn bản nháp chốt ngày.
+
+        date: YYYY-MM-DD, mặc định hôm nay theo múi giờ người dùng. Trả task đang mở,
+        task đổi trạng thái trong ngày, hoạt động đã ghi, báo cáo đã có của ngày đó.
+        """
+        params = {"date": date}
+        return await call(
+            "get_my_day_context",
+            params,
+            ctx,
+            lambda u: report_service.day_context(u, deps.pool, day=date),
+        )
+
+    @mcp.tool(annotations=_WRITE)
+    async def submit_report(
+        ctx: Context,
+        project_id: int,
+        done: str,
+        blockers: str | None = None,
+        schedule_conflicts: str | None = None,
+        report_date: str | None = None,
+        mode: str = "create",
+        blocker_items: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Nộp báo cáo ngày cho một project.
+
+        CHỈ gọi sau khi đã cho người dùng xem bản nháp và người dùng xác nhận nộp.
+        done: đã làm gì; blockers: vướng mắc; schedule_conflicts: xung đột lịch
+        (mỗi trường tối đa 2000 ký tự). report_date: YYYY-MM-DD, mặc định hôm nay.
+        mode: create (mặc định; lỗi conflict nếu đã nộp) | append (bổ sung) |
+        replace (thay toàn bộ) — khi gặp conflict, hỏi người dùng chọn append hay replace.
+        blocker_items: [{kind: technical|people|external|schedule|other,
+        severity: low|medium|high, text}].
+        """
+        params = {
+            "project_id": project_id,
+            "done": done,
+            "blockers": blockers,
+            "schedule_conflicts": schedule_conflicts,
+            "report_date": report_date,
+            "mode": mode,
+            "blocker_items": blocker_items,
+        }
+        return await call(
+            "submit_report",
+            params,
+            ctx,
+            lambda u: report_service.submit(
+                u,
+                deps.pool,
+                project_id=project_id,
+                done=done,
+                blockers=blockers,
+                schedule_conflicts=schedule_conflicts,
+                report_date=report_date,
+                mode=mode,
+                blocker_items=blocker_items,
+            ),
+        )
+
+    @mcp.tool(annotations=_READ_ONLY)
+    async def get_my_reports(
+        ctx: Context, from_date: str, to_date: str, project_id: int | None = None
+    ) -> dict[str, Any]:
+        """Báo cáo của chính người dùng trong khoảng ngày (YYYY-MM-DD, tối đa 93 ngày)."""
+        params = {"from_date": from_date, "to_date": to_date, "project_id": project_id}
+        return await call(
+            "get_my_reports",
+            params,
+            ctx,
+            lambda u: report_service.list_mine(
+                u, deps.pool, from_date=from_date, to_date=to_date, project_id=project_id
             ),
         )
 

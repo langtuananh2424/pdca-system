@@ -16,6 +16,7 @@ from pdca_core.authz.context import UserContext
 from pdca_core.authz.tokens import authenticate, issue_token
 from pdca_core.errors import ForbiddenOrNotFound
 from pdca_core.org import service as org_service
+from pdca_core.reports import service as report_service
 from pdca_core.repositories.tokens import PgTokenRepository
 from pdca_core.tasks import service as task_service
 
@@ -135,6 +136,34 @@ CASES: list[tuple[str, str, Call, set[str]]] = [
             c, p, project_id=w.project_a, summary="x", task_id=w.task_in_b
         ),
         set(),
+    ),
+    (
+        "get_my_day_context",
+        "own",
+        lambda c, p, w, r: report_service.day_context(c, p),
+        {"staff", "dept_head", "director"},
+    ),
+    (
+        "submit_report",
+        "member_project",
+        lambda c, p, w, r: report_service.submit(
+            c, p, project_id=w.project_a, done="matrix", mode="replace"
+        ),
+        {"staff", "dept_head", "director"},  # admin là thành viên nhưng không có report.submit.own
+    ),
+    (
+        "submit_report",
+        "non_member_project",
+        lambda c, p, w, r: report_service.submit(c, p, project_id=w.project_b, done="x"),
+        set(),
+    ),
+    (
+        "get_my_reports",
+        "own",
+        lambda c, p, w, r: report_service.list_mine(
+            c, p, from_date="2026-01-01", to_date="2026-03-31"
+        ),
+        {"staff", "dept_head", "director"},
     ),
 ]
 
