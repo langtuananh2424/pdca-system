@@ -1,0 +1,14 @@
+{
+  "name": "pdca-system",
+  "description": "Plugin nội bộ cho hệ thống Trợ lý AI PDCA",
+  "owner": {
+    "name": "Lăng Tuấn Anh"
+  },
+  "plugins": [
+    {
+      "name": "pdca",
+      "source": "./plugin",
+      "description": "Rule công ty/phòng ban, lệnh chốt ngày và kết nối MCP Server PDCA"
+    }
+  ]
+}
