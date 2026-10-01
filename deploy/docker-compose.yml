@@ -52,10 +52,12 @@ services:
       FLYWAY_URL: jdbc:postgresql://db:5432/pdca
       FLYWAY_USER: flyway
       FLYWAY_PASSWORD: ${FLYWAY_PASSWORD:?đặt trong deploy/.env}
-      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      # Dev nạp thêm seed (db/seed); staging/prod đặt FLYWAY_LOCATIONS=filesystem:/flyway/sql.
+      FLYWAY_LOCATIONS: ${FLYWAY_LOCATIONS:-filesystem:/flyway/sql,filesystem:/flyway/seed}
       FLYWAY_CONNECT_RETRIES: "10"
     volumes:
       - ../db/migration:/flyway/sql:ro
+      - ../db/seed:/flyway/seed:ro
     depends_on:
       db:
         condition: service_healthy

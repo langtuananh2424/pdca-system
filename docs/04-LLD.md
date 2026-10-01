@@ -287,12 +287,15 @@ revoke update, delete, truncate on audit_log from public;
 | `pdca_app` | MCP Server, Agent Service, Scheduler | `select/insert/update` trên bảng nghiệp vụ; chỉ `insert` và `select` trên `audit_log`; không có `delete` trên `audit_log` |
 | `pdca_readonly` | Dashboard (P2), báo cáo | `select` |
 
+Cài đặt: login + mật khẩu tạo ngoài migration (`deploy/initdb/01-roles.sh`); quyền cấp ở `V2__role_grants.sql`, kèm `alter default privileges for role flyway` để bảng của migration sau tự có quyền như trên. Bảng chỉ thêm mới (như `audit_log`) phải `revoke update` tường minh trong migration tạo ra nó. `pdca_app` không có quyền trên `flyway_schema_history`.
+
 ### 2.4 Kế hoạch P2
 `documents`, `chunks(embedding vector)`, `acl` cho RAG sẽ thêm ở migration riêng khi vào P2; chỉ mục `ivfflat` hoặc `hnsw` chọn theo kích thước dữ liệu thực tế.
 
 ### 2.5 Dữ liệu khởi tạo (seed)
 - Một `admin`, một `director`, các phòng ban thử nghiệm.
 - Không seed token; token cấp qua `pdca-admin`.
+- Cài đặt: `db/seed/R__dev_seed.sql` (Flyway repeatable, idempotent, email `@example.com`), chỉ nạp khi `FLYWAY_LOCATIONS` có `db/seed` (mặc định ở Compose dev). Staging/prod không nạp seed; admin thật tạo qua `pdca-admin`.
 
 ## 3. Xác thực và phân quyền
 

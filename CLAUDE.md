@@ -36,6 +36,7 @@ Docker Compose + Caddy.
 ## Cấu trúc
 ```
 db/migration/   Flyway V{n}__{mô_tả}.sql — nguồn DDL duy nhất
+db/seed/        dữ liệu dev (R__, idempotent) — không nạp ở staging/prod
 src/pdca_core/  lớp nghiệp vụ: authz org plans tasks reports actions aggregation audit repositories
 src/adapters/   mcp llm channels rules docs
 src/apps/       mcp_server agent_service scheduler admin_cli dashboard
@@ -93,11 +94,12 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 - Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 
 ## Trạng thái hiện tại
-Xong LLD mục 12 bước 1: tài liệu thiết kế v0.1 (nháp), khung thư mục,
-`pyproject.toml` + `uv.lock`, CI (GitHub Actions), Docker Compose cục bộ
-(`deploy/`; dịch vụ ứng dụng nằm trong profile `apps` cho tới khi có
-entrypoint). Bước tiếp theo: bước 2 — Flyway V1, grant cho vai trò DB, seed.
-Login + mật khẩu các vai trò DB tạo ở `deploy/initdb/`, không trong migration.
+Xong LLD mục 12 bước 1–2: khung dự án, CI, Docker Compose cục bộ (`deploy/`;
+dịch vụ ứng dụng nằm trong profile `apps` cho tới khi có entrypoint);
+`V1__core.sql`, `V2__role_grants.sql`, seed dev; test tích hợp schema/quyền
+ở `tests/integration/` (Postgres + Flyway thật). Login + mật khẩu vai trò DB
+tạo ở `deploy/initdb/`, không trong migration. Bước tiếp theo: bước 3 —
+`authz` + token + `audit` + `run_tool`.
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09).
