@@ -125,3 +125,53 @@ def insert_activity(
     if row is None:  # insert ... returning luôn trả một dòng
         raise RuntimeError("insert into activities returned no row")
     return row
+
+
+def insert_task(
+    conn: Connection[Any],
+    *,
+    project_id: int,
+    plan_id: int | None,
+    assignee_id: int,
+    created_by: int,
+    title: str,
+    detail: str | None,
+    due_date: date | None,
+) -> int:
+    """Tạo task `todo` và ghi sự kiện tạo vào `task_events` (FR-TASK-01, FR-TASK-05)."""
+    row = conn.execute(
+        """
+        insert into tasks (project_id, plan_id, assignee_id, created_by, title, detail, due_date)
+        values (%s, %s, %s, %s, %s, %s, %s)
+        returning id
+        """,
+        (project_id, plan_id, assignee_id, created_by, title, detail, due_date),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("insert into tasks returned no row")
+    task_id = int(row[0])
+    conn.execute(
+        "insert into task_events (task_id, from_status, to_status, by_user_id, note)"
+        " values (%s, null, 'todo', %s, 'created')",
+        (task_id, created_by),
+    )
+    return task_id
+
+
+def reassign(conn: Connection[Any], task: TaskRow, assignee_id: int, by_user_id: int) -> None:
+    """Đổi người thực hiện; lịch sử ghi vào `task_events` (trạng thái giữ nguyên)."""
+    conn.execute(
+        "update tasks set assignee_id = %s, updated_at = now() where id = %s",
+        (assignee_id, task.id),
+    )
+    conn.execute(
+        "insert into task_events (task_id, from_status, to_status, by_user_id, note)"
+        " values (%s, %s, %s, %s, %s)",
+        (
+            task.id,
+            task.status,
+            task.status,
+            by_user_id,
+            f"reassigned: {task.assignee_id} -> {assignee_id}",
+        ),
+    )

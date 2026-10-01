@@ -16,6 +16,7 @@ from pdca_core.authz.context import UserContext
 from pdca_core.authz.tokens import authenticate, issue_token
 from pdca_core.errors import ForbiddenOrNotFound
 from pdca_core.org import service as org_service
+from pdca_core.plans import service as plan_service
 from pdca_core.reports import service as report_service
 from pdca_core.repositories.tokens import PgTokenRepository
 from pdca_core.tasks import service as task_service
@@ -35,6 +36,10 @@ class World:
     project_a: int
     project_b: int  # caller không phải thành viên
     task_in_b: int
+    peer: int
+    outsider: int  # thành viên project B (phòng B)
+    plan_a: int  # kế hoạch của peer trong project A
+    plan_b: int  # kế hoạch của outsider trong project B
 
 
 @pytest.fixture(scope="module")
@@ -75,11 +80,38 @@ def world(app_pool: ConnectionPool) -> World:
         peer_task = task(peer, a)
         task_in_b = task(outsider, b)
 
+        def plan(owner: int, project: int) -> int:
+            row = conn.execute(
+                "insert into plans (project_id, level, goal, start_date, end_date, owner_id)"
+                " values (%s, 'month', 'matrix', '2026-10-01', '2026-10-31', %s) returning id",
+                (project, owner),
+            ).fetchone()
+            return int(row[0])  # type: ignore[index]
+
+        plan_a = plan(peer, a)
+        plan_b = plan(outsider, b)
+
     callers = {
         role: authenticate(issue_token(tokens, uid).token, tokens, "matrix")
         for role, uid in ids.items()
     }
-    return World(callers, own_task, peer_task, a, b, task_in_b)
+    return World(callers, own_task, peer_task, a, b, task_in_b, peer, outsider, plan_a, plan_b)
+
+
+def _version(pool: ConnectionPool, plan_id: int) -> int:
+    with pool.connection() as conn:
+        row = conn.execute("select version from plans where id = %s", (plan_id,)).fetchone()
+    return int(row[0])  # type: ignore[index]
+
+
+def _month(project_id: int) -> dict[str, Any]:
+    return {
+        "level": "month",
+        "goal": "matrix",
+        "start_date": "2026-10-01",
+        "end_date": "2026-10-31",
+        "project_id": project_id,
+    }
 
 
 Call = Callable[[UserContext, ConnectionPool, World, str], Any]
@@ -164,6 +196,77 @@ CASES: list[tuple[str, str, Call, set[str]]] = [
             c, p, from_date="2026-01-01", to_date="2026-03-31"
         ),
         {"staff", "dept_head", "director"},
+    ),
+    # --- Bước 7: kế hoạch (plan.read / plan.write) và giao việc (task.create / task.assign)
+    (
+        "get_plan",
+        "peer_plan_same_project",
+        lambda c, p, w, r: plan_service.get_plan(c, p, plan_id=w.plan_a),
+        {"staff", "dept_head", "director"},
+    ),
+    (
+        "get_plan",
+        "plan_other_department",
+        lambda c, p, w, r: plan_service.get_plan(c, p, plan_id=w.plan_b),
+        {"director"},
+    ),
+    (
+        "create_plan",
+        "member_project",
+        lambda c, p, w, r: plan_service.create_plan(c, p, **_month(w.project_a)),
+        {"staff", "dept_head", "director"},
+    ),
+    (
+        "create_plan",
+        "project_other_department",
+        lambda c, p, w, r: plan_service.create_plan(c, p, **_month(w.project_b)),
+        {"director"},
+    ),
+    (
+        "update_plan",
+        "peer_plan_same_project",
+        lambda c, p, w, r: plan_service.update_plan(
+            c, p, plan_id=w.plan_a, expected_version=_version(p, w.plan_a), goal=r, reason="m"
+        ),
+        {"dept_head", "director"},  # staff chỉ sửa kế hoạch của mình
+    ),
+    (
+        "update_plan",
+        "plan_other_department",
+        lambda c, p, w, r: plan_service.update_plan(
+            c, p, plan_id=w.plan_b, expected_version=_version(p, w.plan_b), goal=r, reason="m"
+        ),
+        {"director"},
+    ),
+    (
+        "create_task",
+        "project_same_department",
+        lambda c, p, w, r: task_service.create_task(
+            c, p, project_id=w.project_a, title="m", assignee_id=w.peer
+        ),
+        {"dept_head", "director"},
+    ),
+    (
+        "create_task",
+        "project_other_department",
+        lambda c, p, w, r: task_service.create_task(
+            c, p, project_id=w.project_b, title="m", assignee_id=w.outsider
+        ),
+        {"director"},
+    ),
+    (
+        "assign_task",
+        "task_same_department",
+        lambda c, p, w, r: task_service.assign_task(c, p, task_id=w.peer_task, assignee_id=w.peer),
+        {"dept_head", "director"},
+    ),
+    (
+        "assign_task",
+        "task_other_department",
+        lambda c, p, w, r: task_service.assign_task(
+            c, p, task_id=w.task_in_b, assignee_id=w.outsider
+        ),
+        {"director"},
     ),
 ]
 

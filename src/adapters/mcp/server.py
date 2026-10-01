@@ -23,6 +23,7 @@ from pdca_core.authz.tokens import TokenRepository, authenticate
 from pdca_core.errors import ToolError
 from pdca_core.org import service as org_service
 from pdca_core.output_limits import OutputLimits
+from pdca_core.plans import service as plan_service
 from pdca_core.ratelimit import RateLimiter
 from pdca_core.reports import service as report_service
 from pdca_core.tasks import service as task_service
@@ -231,6 +232,191 @@ def build_server(deps: ToolDeps) -> MCPServer:
             ctx,
             lambda u: report_service.list_mine(
                 u, deps.pool, from_date=from_date, to_date=to_date, project_id=project_id
+            ),
+        )
+
+    @mcp.tool(annotations=_READ_ONLY)
+    async def list_plans(
+        ctx: Context,
+        project_id: int | None = None,
+        level: str | None = None,
+        parent_id: int | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Danh sách kế hoạch người dùng được xem, sắp theo ngày bắt đầu.
+
+        level: year | month | week | day. from_date/to_date (YYYY-MM-DD): lấy kế hoạch
+        giao với khoảng này. limit 1..100 (mặc định 20); cursor: next_cursor trang trước.
+        """
+        params = {
+            "project_id": project_id,
+            "level": level,
+            "parent_id": parent_id,
+            "from_date": from_date,
+            "to_date": to_date,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        return await call(
+            "list_plans",
+            params,
+            ctx,
+            lambda u: plan_service.list_plans(
+                u,
+                deps.pool,
+                project_id=project_id,
+                level=level,
+                parent_id=parent_id,
+                from_date=from_date,
+                to_date=to_date,
+                limit=limit,
+                cursor=cursor,
+            ),
+        )
+
+    @mcp.tool(annotations=_READ_ONLY)
+    async def get_plan(ctx: Context, plan_id: int) -> dict[str, Any]:
+        """Một kế hoạch kèm kế hoạch con trực tiếp và task gắn với nó."""
+        return await call(
+            "get_plan",
+            {"plan_id": plan_id},
+            ctx,
+            lambda u: plan_service.get_plan(u, deps.pool, plan_id=plan_id),
+        )
+
+    @mcp.tool(annotations=_WRITE)
+    async def create_plan(
+        ctx: Context,
+        level: str,
+        goal: str,
+        start_date: str,
+        end_date: str,
+        project_id: int | None = None,
+        parent_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Tạo kế hoạch do người dùng sở hữu. Chỉ gọi sau khi người dùng xác nhận nội dung.
+
+        level: year | month | week | day; có parent_id thì level phải thấp hơn cha một bậc
+        và ngày (YYYY-MM-DD) nằm trong khoảng của cha.
+        """
+        params = {
+            "level": level,
+            "goal": goal,
+            "start_date": start_date,
+            "end_date": end_date,
+            "project_id": project_id,
+            "parent_id": parent_id,
+        }
+        return await call(
+            "create_plan",
+            params,
+            ctx,
+            lambda u: plan_service.create_plan(
+                u,
+                deps.pool,
+                level=level,
+                goal=goal,
+                start_date=start_date,
+                end_date=end_date,
+                project_id=project_id,
+                parent_id=parent_id,
+            ),
+        )
+
+    @mcp.tool(annotations=_WRITE)
+    async def update_plan(
+        ctx: Context,
+        plan_id: int,
+        expected_version: int,
+        reason: str,
+        goal: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        """Sửa mục tiêu, ngày hoặc trạng thái kế hoạch. Chỉ gọi sau khi người dùng xác nhận.
+
+        expected_version: version đọc được từ get_plan/list_plans (khác thì lỗi conflict —
+        đọc lại rồi hỏi người dùng). reason: lý do thay đổi (bắt buộc).
+        status: draft→active|cancelled, active→done|cancelled.
+        """
+        params = {
+            "plan_id": plan_id,
+            "expected_version": expected_version,
+            "reason": reason,
+            "goal": goal,
+            "start_date": start_date,
+            "end_date": end_date,
+            "status": status,
+        }
+        return await call(
+            "update_plan",
+            params,
+            ctx,
+            lambda u: plan_service.update_plan(
+                u,
+                deps.pool,
+                plan_id=plan_id,
+                expected_version=expected_version,
+                reason=reason,
+                goal=goal,
+                start_date=start_date,
+                end_date=end_date,
+                status=status,
+            ),
+        )
+
+    @mcp.tool(annotations=_WRITE)
+    async def create_task(
+        ctx: Context,
+        project_id: int,
+        title: str,
+        assignee_id: int,
+        plan_id: int | None = None,
+        due_date: str | None = None,
+        detail: str | None = None,
+    ) -> dict[str, Any]:
+        """Giao task mới cho một thành viên project (trưởng phòng trong phòng, giám đốc).
+
+        Chỉ gọi sau khi người dùng xác nhận.
+        due_date: YYYY-MM-DD, nằm trong khoảng của kế hoạch nếu có plan_id.
+        """
+        params = {
+            "project_id": project_id,
+            "title": title,
+            "assignee_id": assignee_id,
+            "plan_id": plan_id,
+            "due_date": due_date,
+            "detail": detail,
+        }
+        return await call(
+            "create_task",
+            params,
+            ctx,
+            lambda u: task_service.create_task(
+                u,
+                deps.pool,
+                project_id=project_id,
+                title=title,
+                assignee_id=assignee_id,
+                plan_id=plan_id,
+                due_date=due_date,
+                detail=detail,
+            ),
+        )
+
+    @mcp.tool(annotations=_WRITE)
+    async def assign_task(ctx: Context, task_id: int, assignee_id: int) -> dict[str, Any]:
+        """Giao lại task cho thành viên khác của project. Chỉ gọi sau khi người dùng xác nhận."""
+        return await call(
+            "assign_task",
+            {"task_id": task_id, "assignee_id": assignee_id},
+            ctx,
+            lambda u: task_service.assign_task(
+                u, deps.pool, task_id=task_id, assignee_id=assignee_id
             ),
         )
 

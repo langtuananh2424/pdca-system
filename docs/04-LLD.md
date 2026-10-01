@@ -472,6 +472,15 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
 - `get_my_reports`: mọi trạng thái của chính người gọi, khoảng tối đa 93 ngày, ≤ 100 dòng (vượt → `truncated`); mỗi báo cáo kèm `blocker_items` chưa xóa.
 - `get_my_day_context`: quyền `task.read.own` + `report.read.own`; mỗi danh sách ≤ 100 dòng; `tasks_open` là trạng thái hiện tại (không phụ thuộc `date`), `tasks_changed_today` là `task_events` do chính người dùng tạo trong ngày.
 
+#### Ghi chú cài đặt (P1 bước 7)
+- **Phòng của kế hoạch** = phòng của project; kế hoạch không gắn project lấy phòng của chủ sở hữu; kế hoạch của giám đốc (không thuộc phòng) là cấp công ty — chỉ `director` đọc/ghi. Hệ quả (mặc định từ chối): trưởng phòng **không** gắn được kế hoạch con vào kế hoạch cấp công ty; cần quyết định nếu muốn trưởng phòng đọc kế hoạch công ty để chia nhỏ.
+- **Đọc** (`list_plans`, `get_plan`): theo `plan.read` của LLD 3.2, cộng thêm **chủ sở hữu luôn đọc được kế hoạch của mình** (staff được `plan.write` "của mình" nên phải đọc lại được). Danh sách lọc bằng SQL theo vai trò rồi kiểm lại bằng `can`. Sắp theo `start_date`, `id`; cursor keyset; `from_date`/`to_date` lấy kế hoạch giao với khoảng.
+- `get_plan` trả `plan`, `children` (chỉ con đọc được), `tasks`, `task_counts`; người có `task.assign` trên phạm vi thấy mọi task, người khác chỉ thấy task của mình (số đếm vẫn đủ).
+- `create_plan`: chủ sở hữu luôn là người gọi; có `project_id` thì phải đọc được project (`plan.read`) và project chưa `closed`; có `parent_id` thì phải đọc được cha, cha chưa `done/cancelled`, cha có project thì con cùng project, `level` thấp hơn một bậc, ngày nằm trong cha. Ghi `plan_versions` bản 1 (`reason = 'created'`).
+- `update_plan`: chỉ sửa `goal`, `start_date`, `end_date`, `status` (không đổi cha/project/mức); `reason` bắt buộc; khóa dòng + so `expected_version` → `conflict`; trạng thái `draft→active|cancelled`, `active→done|cancelled`, kế hoạch `done/cancelled` không sửa được; đổi ngày phải vẫn nằm trong cha và chứa mọi kế hoạch con. Mỗi lần sửa tăng `version` và ghi `plan_versions` với ảnh chụp sau thay đổi.
+- `create_task`: quyền `task.create` theo phòng của project; người nhận phải là thành viên đang hoạt động của project (`invalid_argument`); `plan_id` phải cùng project, chưa đóng, `due_date` nằm trong kế hoạch. Ghi `task_events` (`null → todo`, ghi chú `created`).
+- `assign_task`: quyền `task.assign`; task `done/cancelled` → `conflict`; giao cho chính người đang nhận trả `changed: false`. Lịch sử ghi vào `task_events` (trạng thái giữ nguyên, ghi chú `reassigned: <cũ> -> <mới>`).
+
 ### 4.3 Khung cài đặt tool (tham khảo)
 
 ```python
