@@ -3,8 +3,8 @@
 #   cp deploy/.env.example deploy/.env      # rồi đặt mật khẩu
 #   docker compose -f deploy/docker-compose.yml up -d            # db + flyway
 #   docker compose -f deploy/docker-compose.yml --profile apps up -d --build
-# Profile "apps": mcp + proxy (Caddy). Profile "workers": agent, scheduler
-# (chưa có entrypoint — LLD 12 bước 8).
+# Profile "apps": mcp + proxy (Caddy) + scheduler. Profile "workers": agent
+# (chưa có entrypoint — chờ kênh thật, OI-01).
 name: pdca
 
 x-app: &app
@@ -95,8 +95,18 @@ services:
 
   scheduler:
     <<: *app
-    profiles: [workers]
     command: ["python", "-m", "apps.scheduler"]
+    environment:
+      <<: *app-env
+      # log = chỉ ghi log, không gửi (dev). Email thêm sau (OI-01).
+      CHANNEL_KIND: ${CHANNEL_KIND:-log}
+      NTF_MAX_PER_DAY: ${NTF_MAX_PER_DAY:-3}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
+      # Để trống = lịch mặc định (LLD 5.2, apps/scheduler/settings.py).
+      JOB_MORNING_NUDGE_CRON: ${JOB_MORNING_NUDGE_CRON:-}
+      JOB_PROGRESS_ASK_CRON: ${JOB_PROGRESS_ASK_CRON:-}
+      JOB_PROGRESS_REMIND_CRON: ${JOB_PROGRESS_REMIND_CRON:-}
+      JOB_MARK_NOT_REPORTED_CRON: ${JOB_MARK_NOT_REPORTED_CRON:-}
 
   proxy:
     image: caddy:2-alpine

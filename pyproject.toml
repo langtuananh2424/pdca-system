@@ -56,6 +56,10 @@ packages = ["pdca_core", "adapters", "apps"]
 strict = true
 warn_unused_configs = true
 
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]  # APScheduler 3.x không có type hint
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

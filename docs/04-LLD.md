@@ -601,6 +601,19 @@ Tên model cụ thể đặt trong cấu hình (mục 8), không ghi trong mã (
 ### 5.7 Hạn mức chi phí
 Trước mỗi lần gọi: đọc tổng `llm_usage` của tháng. ≥ 80% hạn mức → cảnh báo quản trị. ≥ 100% → chỉ chạy tác vụ thiết yếu (`parse_reply`), tạm dừng `propose_actions`, `aggregate` mở rộng (NFR-COST-01).
 
+### 5.8 Cài đặt phần không phụ thuộc kênh (P1 bước 8a)
+
+Kênh thật (email) làm sau (OI-01); phần dưới chạy với kênh `log` (chỉ ghi log).
+
+- **Mô-đun**: `pdca_core/outreach/` — `jobs.py` (`morning_nudge`, `progress_ask`, `progress_remind`, `mark_not_reported`, `dedupe_key`), `compose.py` (soạn tin), `outbox.py` (gửi hàng đợi), `ports.py` (`ChannelSender`); `pdca_core/job_runner.py` (`run_job`); `adapters/channels/` (`log`); `apps/scheduler` (APScheduler, `python -m apps.scheduler`).
+- **Lệch HLD/LLD 5.1**: P1 gộp bộ gửi tin (`outbox`) vào tiến trình Scheduler, gọi thẳng `pdca_core` (ADR-011); Agent Service (nhận + phân tích trả lời) thêm khi có kênh thật. Giao diện kênh đồng bộ (`send`), chưa có `fetch_replies`.
+- **Soạn tin bằng mẫu, không gọi LLM** (OI-04 chưa chốt): nội dung lấy thẳng từ task/project, không có gì do AI suy đoán; mọi tin có dòng "Trợ lý AI PDCA, thay mặt {cấp trên trực tiếp} … không phải {người đó} trực tiếp nhắn" (FR-NTF-03), thiếu `manager_id` thì "cấp trên của bạn"; câu hỏi lấy từ `projects.config.check.questions` (FR-CHK-07, tối đa 3/project). `MessageComposer` là chỗ cắm bộ soạn LLM (5.4) sau này.
+- **Chọn người nhận** (SDD 4.11.3): vai trò `staff`, `dept_head` (giám đốc, quản trị không nhận); `active`, chưa xóa; là thành viên ít nhất một project `active`; `away_until` < ngày địa phương; giờ địa phương (theo `users.timezone`) trong `[work_start, work_end]`; số tin đã xếp cho ngày đó (`payload.local_date`) < `NTF_MAX_PER_DAY`; sắp theo hạn task mở gần nhất. `progress_ask` bỏ qua người đã có báo cáo `submitted` cho **mọi** project của mình; tin chỉ nêu project còn thiếu.
+- **Nhắc lại / chưa báo cáo** (FR-NTF-05): `progress_remind` chỉ gửi cho người có tin `progress_ask` của ngày đó ở trạng thái `sent` (chưa `replied`), khóa `…:r1`, `kind = reminder`. `mark_not_reported` với người đã được hỏi (tin `sent`/`replied`) mà project chưa có báo cáo: chèn `reports` trạng thái `not_reported`, `source = 'system'` (migration **V4**), nội dung rỗng; không đè `draft_by_agent`/`submitted` (T-05).
+- **Lịch mặc định**: như 5.2 trừ `progress_remind` **17:15** (17:45 nằm ngoài giờ làm mặc định 17:30 nên sẽ không gửi được); đổi bằng `JOB_<TÊN>_CRON` (crontab 5 trường, theo `TZ_DEFAULT`). `scheduled_for` = thời điểm cron gần nhất ≤ lúc chạy, để chạy trễ vẫn trùng khóa `job_runs`.
+- **`run_job`** (SDD 4.11.7): chèn `job_runs` (`on conflict do nothing` → `duplicate`), `pg_try_advisory_lock(hashtextextended('pdca_job:'||job, 0))` (không lấy được → `skipped`), chạy, ghi `succeeded`/`failed` + `detail` (lỗi chỉ ghi tên lớp ngoại lệ).
+- **Outbox**: mỗi `OUTBOX_INTERVAL_SECONDS` lấy tối đa 50 tin `queued`/`failed` của các kênh đang cấu hình, `attempts < OUTBOX_MAX_ATTEMPTS`, `for update skip locked`; thành công → `sent` + `external_id` + `sent_at`; lỗi tạm thời (kể cả adapter ném ngoại lệ) → `failed`, lần chạy sau thử lại; lỗi vĩnh viễn, hết lượt, hoặc người nhận đã khóa → `dead`. Kênh phải mang `outbound_messages.id` để ghép trả lời (6.2).
+
 ## 6. Giao diện bên ngoài của Agent Service
 
 ### 6.1 `LLMClient`
@@ -740,10 +753,13 @@ Dự kiến dùng hook của Claude Code khi kết thúc phiên để gợi ý g
 | `LLM_API_KEY` | agent | Khóa API, lấy từ kho bí mật |
 | `LLM_MODEL_SMALL/MEDIUM/LARGE` | agent | Tên model theo mức |
 | `LLM_MONTHLY_BUDGET_USD` | agent | Hạn mức tháng |
-| `CHANNEL_KIND` | agent | `email|slack|...` |
+| `CHANNEL_KIND` | agent, scheduler | `log` (dev, chỉ ghi log) hoặc `email` (sau) |
 | `CHANNEL_CREDENTIALS` | agent | Thông tin kênh |
 | `RULES_REPO_URL`, `RULES_REF` | agent | Kho rule và nhánh/thẻ |
 | `TZ_DEFAULT` | scheduler | `Asia/Bangkok` |
+| `JOB_<TÊN>_CRON` | scheduler | Lịch crontab cho `MORNING_NUDGE`, `PROGRESS_ASK`, `PROGRESS_REMIND`, `MARK_NOT_REPORTED`; trống = mặc định (5.8) |
+| `NTF_MAX_PER_DAY` | scheduler | Hạn mức tin/người/ngày (mặc định 3, FR-NTF-04) |
+| `OUTBOX_MAX_ATTEMPTS`, `OUTBOX_INTERVAL_SECONDS` | scheduler | Số lần thử gửi (5), chu kỳ gửi (60 giây) |
 | `RATE_LIMIT_PER_MIN` | mcp | Giới hạn theo người dùng |
 | `OUTPUT_MAX_ROWS`, `OUTPUT_MAX_BYTES` | mcp | Giới hạn đầu ra |
 | `MCP_HOST`, `MCP_PORT` | mcp | Địa chỉ lắng nghe (mặc định `127.0.0.1:8000`; container dùng `0.0.0.0`) |

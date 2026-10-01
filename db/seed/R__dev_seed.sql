@@ -53,4 +53,7 @@ select p.id, u.id, case when u.role = 'dept_head' then 'lead' else 'member' end
 from projects p
 join users u on u.department_id = p.department_id
 where p.name in ('Dự án thử nghiệm A', 'Dự án thử nghiệm B')
+  -- Chỉ tài khoản seed: chạy lại không kéo người dùng khác của phòng vào project mẫu.
+  and u.email in ('head.a@example.com', 'head.b@example.com', 'staff.a1@example.com',
+                  'staff.a2@example.com', 'staff.b1@example.com')
 on conflict do nothing;

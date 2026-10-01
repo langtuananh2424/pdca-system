@@ -37,7 +37,7 @@ Docker Compose + Caddy.
 ```
 db/migration/   Flyway V{n}__{mô_tả}.sql — nguồn DDL duy nhất
 db/seed/        dữ liệu dev (R__, idempotent) — không nạp ở staging/prod
-src/pdca_core/  lớp nghiệp vụ: authz org plans tasks reports actions aggregation audit repositories
+src/pdca_core/  lớp nghiệp vụ: authz org plans tasks reports outreach actions aggregation audit repositories
 src/adapters/   mcp llm channels rules docs
 src/apps/       mcp_server agent_service scheduler admin_cli dashboard
 src/config/
@@ -115,7 +115,10 @@ Claude Code ở `plugin/` (marketplace `.claude-plugin/marketplace.json`): skill
 `/pdca:chot-ngay`, `/pdca:viec-cua-toi`, hook SessionStart nạp rule ghép sẵn —
 sửa `rules/` rồi chạy `uv run pdca-admin rules build` (LLD 7.5). Đủ tool P1
 của LLD 4.2. Bước tiếp theo theo LLD 12: bước 8 — adapter kênh + outbox + job
-nhắc việc (chờ OI-01 chốt kênh).
+nhắc việc: đã xong phần không phụ thuộc kênh (LLD 5.8 — `pdca_core/outreach`,
+`job_runner.run_job`, `apps/scheduler` chạy trong Compose với kênh `log`, V4
+`reports.source = 'system'`). Còn lại: adapter email + nhận/phân tích trả lời
+(Agent Service, cần chốt LLM — OI-04).
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09).
