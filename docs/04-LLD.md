@@ -476,6 +476,16 @@ async def submit_report(project_id: int, done: str, blockers: str = "",
 
 `run_tool` bao: đo thời gian, bắt ngoại lệ → mã lỗi chuẩn, cắt kích thước đầu ra, ghi `audit_log` (ok/denied/error), gắn `request_id` vào log.
 
+**Đã cài đặt (P1 bước 3)** — `pdca_core/tool_runner.py`, lệch so với khung trên:
+- Xác thực nằm **bên trong** `run_tool` (tham số `authenticate(request_id) -> UserContext`), không gọi `current_context()` trước, để token sai cũng được audit `denied` (FR-AUTH-04, T-08). Vì vậy nếu dùng `token_verifier` của SDK thì lời gọi bị chặn ở tầng HTTP sẽ không có audit — adapter MCP (bước 4) chỉ nên đọc header rồi giao cho `run_tool`.
+- `run_tool` là hàm đồng bộ, không phụ thuộc SDK MCP; adapter gọi qua thread. Agent Service dùng lại với `actor_kind=agent`.
+- Thứ tự: xác thực → giới hạn tần suất (`RateLimiter` trong bộ nhớ, theo `user_id`) → nghiệp vụ → `limit_output` → audit → log. Không ghi được audit thì trả `internal`, không trả kết quả.
+- `unauthorized`, `forbidden_or_not_found`, `rate_limited` audit là `denied`; mã khác là `error`. Ngoại lệ lạ thành `internal`, chi tiết chỉ vào log.
+- `params_redacted`: giữ số, bool và chuỗi của khóa `*_id`, `*_date`, `status`, `mode`, `level`, `kind`, `severity`, `cursor`; chuỗi khác chỉ giữ `{"len": n}`, danh sách đối tượng chỉ giữ `{"count": n}`.
+- Đầu ra tool là `dict`; cắt danh sách > 100 dòng, chuỗi > 2000 ký tự, rồi bớt dòng cuối của danh sách lớn nhất tới khi ≤ 50 KB, gắn `truncated: true`.
+- `last_used_at` ghi tối đa một lần mỗi phút cho mỗi token.
+- `pdca-admin token issue --email … [--label] [--days 90]` / `token revoke --id …`, audit `actor_kind=admin_cli`.
+
 `current_context()` lấy token từ header `Authorization` của request hiện tại; cách truy cập header trong SDK phải đối chiếu tài liệu SDK đang dùng (SDK 2.x có sẵn tham số `token_verifier` và `middleware` của `MCPServer`, cần đánh giá trước khi tự viết middleware ASGI).
 
 ## 5. Agent Service

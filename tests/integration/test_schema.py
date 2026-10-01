@@ -97,7 +97,10 @@ def test_report_unique_per_user_project_day(app: Conn) -> None:
 
 
 def test_seed_org_structure(app: Conn) -> None:
-    rows = app.execute("select role, count(*) from users group by role").fetchall()
+    # Chỉ đếm tài khoản seed; test khác tạo người dùng @test.invalid.
+    rows = app.execute(
+        "select role, count(*) from users where email like '%@example.com' group by role"
+    ).fetchall()
     roles = {role: count for role, count in rows}
     assert roles == {"admin": 1, "director": 1, "dept_head": 2, "staff": 3}
     # Nhân viên báo cáo cho trưởng phòng của mình, trưởng phòng báo cáo cho giám đốc.
@@ -106,8 +109,9 @@ def test_seed_org_structure(app: Conn) -> None:
         select u.email from users u
         join departments d on d.id = u.department_id
         left join users m on m.id = u.manager_id
-        where (u.role = 'staff' and u.manager_id is distinct from d.head_user_id)
-           or (u.role = 'dept_head' and m.role is distinct from 'director')
+        where u.email like '%@example.com'
+          and ((u.role = 'staff' and u.manager_id is distinct from d.head_user_id)
+            or (u.role = 'dept_head' and m.role is distinct from 'director'))
         """
     ).fetchall()
     assert bad == []

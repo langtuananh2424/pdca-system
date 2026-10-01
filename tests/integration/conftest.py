@@ -10,6 +10,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg_pool import ConnectionPool
 from testcontainers.community.postgres import PostgresContainer
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
@@ -34,14 +35,13 @@ class Database:
     port: int
     network: Network
 
-    def connect(self, role: str) -> Conn:
-        return psycopg.connect(
-            host=self.host,
-            port=self.port,
-            dbname="pdca",
-            user=role,
-            password=PASSWORDS[role],
+    def conninfo(self, role: str) -> str:
+        return (
+            f"host={self.host} port={self.port} dbname=pdca user={role} password={PASSWORDS[role]}"
         )
+
+    def connect(self, role: str) -> Conn:
+        return psycopg.connect(self.conninfo(role))
 
     def run_flyway(self, *args: str, seed: bool = True) -> str:
         """Chạy Flyway trong container cùng mạng; lỗi nếu exit code khác 0."""
@@ -96,6 +96,13 @@ def db() -> Iterator[Database]:
             )
             database.run_flyway("migrate")
             yield database
+
+
+@pytest.fixture(scope="session")
+def app_pool(db: Database) -> Iterator[ConnectionPool]:
+    """Pool với vai trò pdca_app — đúng tài khoản ứng dụng dùng (LLD 2.3)."""
+    with ConnectionPool(db.conninfo("pdca_app"), min_size=1, max_size=4) as pool:
+        yield pool
 
 
 @pytest.fixture
