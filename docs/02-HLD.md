@@ -4,8 +4,8 @@
 | Mục | Giá trị |
 |---|---|
 | Mã tài liệu | AIA-HLD-001 |
-| Phiên bản | 0.1 (bản nháp) |
-| Ngày | 2026-10-01 |
+| Phiên bản | 0.2 (bản nháp, đang soạn) |
+| Ngày | 2026-10-02 |
 | Căn cứ | AIA-SRS-001 |
 | Tác giả | Lăng Tuấn Anh |
 | Trạng thái | Nháp, chờ rà soát |
@@ -21,7 +21,8 @@ HLD mô tả kiến trúc tổng thể đáp ứng SRS: thành phần, ranh gi�
 |---|---|---|
 | Phân quyền theo từng người, ở server | NFR-SEC-02, FR-AUTH-02 | Danh tính đi cùng mọi lời gọi; tự xây MCP server |
 | Hỏi riêng từng người, chủ động | FR-NTF-02..05 | Cần Agent Service và Scheduler riêng |
-| Làm việc chủ yếu trong Claude Code | NFR-USE-01 | MCP + lệnh/plugin là cửa vào chính |
+| Mọi nhân viên dùng được, kể cả người không rành kỹ thuật | NFR-USE-01, EIR-09 | Web chat là cửa vào chính; Claude Code + MCP là cửa phụ (ADR-014) |
+| Hai cửa vào không được lệch hành vi | FR-AUTH-07 | Một registry tool trong `pdca_core`, mỗi cửa vào chỉ là lớp vỏ mỏng |
 | Dữ liệu PDCA có cấu trúc | FR-PLAN, FR-TASK, FR-CHK | PostgreSQL; RAG chỉ cho văn bản |
 | Nhân bản nguyên tắc bằng kế thừa | FR-RULE-01..06 | Rule ba lớp trong git, ghép lúc chạy |
 | AI chỉ đề xuất | FR-ACTN-04 | Trạng thái `proposed` và bước duyệt bắt buộc |
@@ -30,7 +31,7 @@ HLD mô tả kiến trúc tổng thể đáp ứng SRS: thành phần, ranh gi�
 | Một người phát triển chính | Rủi ro RK-01 | Ít thành phần, công nghệ quen thuộc, cắt phạm vi |
 
 ## 3. Nguyên tắc kiến trúc
-1. **Một nguồn sự thật.** Mọi cửa vào (Claude Code, Agent Service, Dashboard) đi qua cùng lớp dịch vụ nghiệp vụ và cùng kiểm tra quyền.
+1. **Một nguồn sự thật.** Mọi cửa vào (Web chat, Claude Code, Agent Service, Dashboard) đi qua cùng lớp dịch vụ nghiệp vụ, cùng registry tool và cùng kiểm tra quyền.
 2. **Quyền ở server.** Model không bao giờ là hàng rào bảo mật.
 3. **AI đề xuất, người quyết định.** Không có đường ghi vào kế hoạch nào mà không qua duyệt.
 4. **Đi lên là báo cáo, không phải ghi chú.** Chỉ nội dung người dùng đã duyệt rời khỏi phạm vi cá nhân.
@@ -49,6 +50,7 @@ flowchart LR
         A[Quản trị]
     end
     SYS[[Hệ thống Trợ lý AI]]
+    WEB[Trình duyệt - Web chat]
     CC[Claude Code]
     LLM[(LLM API)]
     CH[(Kênh nhắn tin)]
@@ -57,7 +59,9 @@ flowchart LR
     DOC[(Nguồn tài liệu P2)]
     IDP[(IdP tùy chọn P2)]
 
-    S & H & D --> CC
+    S & H & D --> WEB
+    S & H & D -.->|người kỹ thuật| CC
+    WEB <-->|HTTPS, phiên đăng nhập| SYS
     CC <-->|MCP HTTPS| SYS
     A -->|Quản trị| SYS
     SYS <-->|Tool calling| LLM
@@ -74,10 +78,12 @@ flowchart LR
 ```mermaid
 flowchart TB
     subgraph Client[Máy nhân viên]
+        BR[Trình duyệt]
         CC[Claude Code + plugin rule + lệnh]
     end
     subgraph Server[Máy chủ nội bộ - Docker Compose]
         PX[Reverse proxy TLS]
+        WC[Web chat]
         MCP[MCP Server]
         AG[Agent Service]
         SCH[Scheduler]
@@ -91,7 +97,10 @@ flowchart TB
     LLM[(LLM API)]
     CH[(Kênh nhắn tin)]
 
+    BR -->|HTTPS| PX --> WC
     CC -->|HTTPS MCP| PX --> MCP
+    WC --> DOM
+    WC --> LLM
     PX --> DASH
     MCP --> DOM
     AG --> DOM
@@ -111,8 +120,8 @@ flowchart TB
 
 | Mã | Thành phần | Trách nhiệm | Công nghệ chính | Pha |
 |---|---|---|---|---|
-| C-01 | MCP Server | Cổng MCP: xác thực, định tuyến tool, trả dữ liệu theo quyền | Python 3.12, SDK MCP 2.x (`MCPServer`), ASGI | P1 |
-| C-02 | Lớp nghiệp vụ dùng chung | Quy tắc nghiệp vụ, phân quyền, truy cập dữ liệu, audit | Gói Python nội bộ `pdca_core` | P1 |
+| C-01 | MCP Server | Cửa vào phụ cho Claude Code: xác thực token, phơi tool từ registry chung qua MCP | Python 3.12, SDK MCP 2.x (`MCPServer`), ASGI | P1 |
+| C-02 | Lớp nghiệp vụ dùng chung | Quy tắc nghiệp vụ, phân quyền, truy cập dữ liệu, audit, **registry tool** | Gói Python nội bộ `pdca_core` | P1 |
 | C-03 | PostgreSQL | Lưu dữ liệu có cấu trúc, `jsonb`, vector (pgvector từ P2) | PostgreSQL 16 | P1 |
 | C-04 | Flyway | Migration schema có phiên bản | Flyway (Docker) | P1 |
 | C-05 | Scheduler | Kích hoạt tác vụ theo lịch, khóa tránh chạy đôi | APScheduler hoặc cron + khóa advisory của Postgres | P1 |
@@ -123,17 +132,20 @@ flowchart TB
 | C-10 | Dashboard | Xem tổng hợp theo quyền, chỉ đọc | Web nhẹ gọi lớp nghiệp vụ | P2 |
 | C-11 | Chỉ mục RAG | Chia đoạn, vector, lọc theo quyền | pgvector, adapter nguồn | P2 |
 | C-12 | Quan sát | Log có cấu trúc, số liệu, cảnh báo | Prometheus + Grafana + Loki (hoặc nhẹ hơn) | P1 (log), P2 (đủ bộ) |
+| C-13 | Web chat | Cửa vào chính: đăng nhập và phiên, giao diện chat, vòng hội thoại phía server (`LLMClient` + tool calling qua registry chung), thẻ Duyệt/Sửa/Từ chối, API cho thao tác có tác động | Python ASGI + giao diện web (chọn framework ở LLD) | P1 |
 
 ### 5.2 Ranh giới tin cậy
 
 ```mermaid
 flowchart LR
     subgraph Z1[Vùng không tin cậy: máy khách và nội dung]
+        BR[Trình duyệt]
         CC[Claude Code]
         TXT[Nội dung báo cáo, ghi chú]
     end
     subgraph Z2[Vùng tin cậy: máy chủ nội bộ]
         PX[Proxy]
+        WC[Web chat]
         MCP[MCP Server]
         DOM[Lớp nghiệp vụ]
         DB[(DB)]
@@ -142,7 +154,9 @@ flowchart LR
         LLM[(LLM API)]
         CH[(Kênh)]
     end
+    BR --> PX --> WC --> DOM
     CC --> PX --> MCP --> DOM --> DB
+    WC -->|nội dung tối thiểu| LLM
     DOM -->|nội dung tối thiểu| LLM
     DOM --> CH
     TXT -.->|coi là dữ liệu, không phải chỉ thị| DOM
@@ -150,13 +164,16 @@ flowchart LR
 
 ## 6. Luồng chính
 
-### 6.1 Chốt ngày trong Claude Code (UC-04)
+### 6.1 Chốt ngày (UC-04)
+
+Cửa vào chính là web chat: trợ lý chạy ở máy chủ, gọi cùng các tool, lưu nháp, nhân viên bấm Duyệt. Sơ đồ dưới là luồng thay thế qua Claude Code (cửa phụ); bước xác nhận cuối giống nhau ở cả hai cửa (ADR-014).
 
 ```mermaid
 sequenceDiagram
     actor NV as Nhân viên
     participant CC as Claude Code
     participant MCP as MCP Server
+    participant WEB as Web chat
     participant DOM as Lớp nghiệp vụ
     participant DB as PostgreSQL
 
@@ -168,12 +185,16 @@ sequenceDiagram
     DOM-->>MCP: kết quả theo quyền
     MCP-->>CC: ngữ cảnh ngày
     CC->>NV: Bản nháp báo cáo, hỏi xác nhận
-    NV->>CC: Sửa và xác nhận
+    NV->>CC: Sửa và đồng ý
     CC->>MCP: submit_report
     MCP->>DOM: kiểm tra quyền project, ghi báo cáo
-    DOM->>DB: lưu báo cáo và audit
-    MCP-->>CC: mã báo cáo
-    CC-->>NV: Đã nộp
+    DOM->>DB: lưu báo cáo draft_by_agent và audit
+    MCP-->>CC: mã báo cáo, confirm_url
+    CC-->>NV: Đã lưu nháp, mời xác nhận trên web
+    NV->>WEB: Bấm Duyệt (phiên đăng nhập)
+    WEB->>DOM: report.confirm
+    DOM->>DB: chuyển sang submitted, ghi audit
+    WEB-->>NV: Đã nộp
 ```
 
 ### 6.2 Nhắc việc và hỏi tiến độ chủ động (UC-05)
@@ -282,9 +303,9 @@ erDiagram
 | Lớp | Biện pháp | Yêu cầu |
 |---|---|---|
 | Truyền tải | TLS tại proxy; truy cập qua LAN/VPN, không mở ra internet ở P1 | NFR-SEC-01 |
-| Xác thực | Bearer token băm, hạn dùng, thu hồi; nâng lên OAuth 2.1 ở P2 | FR-AUTH-01..05 |
+| Xác thực | MCP: bearer token băm, hạn dùng, thu hồi. Web: phiên phía server, mã phiên băm, cookie `HttpOnly`/`Secure`/`SameSite`. Cả hai nâng lên OAuth 2.1 ở P2 | FR-AUTH-01..06 |
 | Phân quyền | Lớp 1: vai trò. Lớp 2: thành viên project. Kiểm tra trong lớp nghiệp vụ, mặc định từ chối | NFR-SEC-02 |
-| Danh tính | Lấy từ token vào `UserContext`; tham số người dùng do model truyền bị bỏ qua | FR-AUTH-02 |
+| Danh tính | Lấy từ token hoặc phiên vào cùng một `UserContext`; tham số người dùng do model truyền bị bỏ qua; giả lập người dùng chỉ ở `dev` | FR-AUTH-02, FR-AUTH-08 |
 | Dữ liệu | DB user riêng đặc quyền tối thiểu; bí mật qua biến môi trường | NFR-SEC-03..04 |
 | Prompt injection | Tool chỉ trả dữ liệu, trường văn bản được gắn nhãn dữ liệu; thao tác ghi quan trọng yêu cầu xác nhận | NFR-SEC-06, FR-AGT-05 |
 | Giới hạn | Giới hạn tần suất và kích thước đầu ra | NFR-SEC-05, NFR-SEC-07 |
@@ -378,7 +399,7 @@ Tùy chọn thay thế (Java/Spring AI MCP) chưa được kiểm tra mức hoà
 | ADR-002 | Python + SDK MCP chính thức | Nhiều tài liệu, ví dụ và công cụ kiểm thử; thêm hạ tầng chung cho Agent Service | Khác ngôn ngữ với hệ thống PPS English (Java) |
 | ADR-003 | Một PostgreSQL cho dữ liệu cấu trúc và vector | Giảm số thành phần | Có thể phải tách khi dữ liệu văn bản lớn |
 | ADR-004 | Streamable HTTP, stateless | Chuẩn hiện hành, dễ nhân bản | Không có trạng thái phiên phía server |
-| ADR-005 | Bearer token ở P1, OAuth 2.1 ở P2 | Nhanh cho MVP, chuẩn đặc tả cho giai đoạn sau | Phải quản lý vòng đời token thủ công ở P1 |
+| ADR-005 | (Sửa ở v0.2) P1 có hai cách xác thực: bearer token cho MCP, phiên đăng nhập cho web chat; cả hai dựng cùng `UserContext`. OAuth 2.1 ở P2 | Nhanh cho MVP, chuẩn đặc tả cho giai đoạn sau; trình duyệt không giữ token tĩnh an toàn được | Quản lý vòng đời token và phiên thủ công ở P1; hai đường xác thực phải cùng được kiểm thử |
 | ADR-006 | Rule ba lớp trong git, ghép lúc chạy | Version, kế thừa, không sao chép | Người không rành kỹ thuật khó sửa trực tiếp (cần quy trình hỗ trợ) |
 | ADR-007 | Lớp trừu tượng `LLMClient` | Đổi/so sánh model, kiểm soát chi phí | Thêm một lớp, ít tính năng đặc thù của từng nhà cung cấp |
 | ADR-008 | `ChannelAdapter`, chưa khóa vào Slack/Zalo/Teams | Chưa chốt kênh (OI-01) | Mỗi kênh cần adapter riêng |
@@ -387,15 +408,16 @@ Tùy chọn thay thế (Java/Spring AI MCP) chưa được kiểm tra mức hoà
 | ADR-011 | Agent Service dùng chung lớp nghiệp vụ với MCP, không gọi qua MCP vòng ngoài | Một bộ kiểm tra quyền, bớt hop mạng | Hai cửa vào phải cùng giữ hợp đồng |
 | ADR-012 | Không dùng đường truy cập model vi phạm điều khoản (ví dụ proxy dùng OAuth của IDE) | Rủi ro khóa tài khoản và lộ dữ liệu | Bị giới hạn ở nhà cung cấp chính thức |
 | ADR-013 | Pilot trên gói cá nhân chỉ với dữ liệu ít nhạy cảm; trước khi dùng dữ liệu thật chuyển sang API/Team | Điều khoản dữ liệu của gói cá nhân | Chi phí tăng khi chạy thật |
+| ADR-014 | (v0.2) Hai cửa vào song song, một registry tool: web chat là cửa chính, Claude Code + MCP là cửa phụ. Tool khai báo một lần trong `pdca_core`; tool mà model gọi được chỉ tạo bản nháp báo cáo, chuyển sang `submitted` là thao tác của người trên web | Phần lớn nhân viên không dùng Claude Code; web cho máy chủ kiểm soát prompt, rule, chi phí và nút xác nhận; người kỹ thuật vẫn làm việc trong Claude Code | Thêm một cửa vào phải bảo trì; ở Claude Code, prompt và rule nằm ở máy khách nên không kiểm soát được, chi phí mô hình theo gói của từng người; chốt ngày từ Claude Code cần thêm một lần bấm trên web |
 
 ## 13. Lộ trình triển khai theo pha
 
 | Pha | Nội dung | Tiêu chí hoàn thành |
 |---|---|---|
 | P0 Khởi động | Trích xuất nguyên tắc thầy Phúc thành Markdown; chốt OI-01..OI-04; chính sách minh bạch | Bộ rule v1; kênh và gói LLM đã chốt |
-| P1 MVP | Một phòng 3-5 người: schema, MCP (task, báo cáo), token, audit, plugin rule, lệnh chốt ngày, scheduler + nhắc việc qua một kênh | AC-01, AC-03, AC-05, AC-07, AC-08 |
+| P1 MVP | Một phòng 3-5 người: schema, registry tool, web chat (cửa chính) và MCP (cửa phụ) cho task và báo cáo, token + phiên đăng nhập, audit, plugin rule, lệnh chốt ngày, scheduler + nhắc việc qua một kênh | AC-01, AC-03, AC-05, AC-07, AC-08 |
 | P2 Mở rộng | Tổng hợp trưởng phòng và công ty, đề xuất/duyệt Action, RAG và ACL, OAuth, dashboard, đọc lịch | AC-02, AC-04, AC-06 |
-| P3 Toàn công ty | Nhiều phòng, web chat nếu cần, second brain đồng bộ, tối ưu chi phí | NFR-PERF-04, NFR-SCL-01 |
+| P3 Toàn công ty | Nhiều phòng, second brain đồng bộ, tối ưu chi phí | NFR-PERF-04, NFR-SCL-01 |
 
 ## 14. Rủi ro kiến trúc
 
@@ -408,14 +430,16 @@ Tùy chọn thay thế (Java/Spring AI MCP) chưa được kiểm tra mức hoà
 | RK-05 | Kênh nhắn tin bị giới hạn (ví dụ Zalo OA) | Adapter, bắt đầu bằng email hoặc kênh có API chủ động tốt |
 | RK-06 | Rò rỉ dữ liệu qua LLM | Gửi tối thiểu, điều khoản thương mại, phân loại dữ liệu |
 | RK-07 | Prompt injection | Tool chỉ trả dữ liệu, xác nhận ghi, nhãn dữ liệu không tin cậy |
+| RK-08 | Hai cửa vào lệch hành vi hoặc lệch quyền | Một registry tool (ADR-014); bộ ma trận quyền chạy trên cả token và phiên đăng nhập |
+| RK-09 | Lỗi bảo mật ở phần web mới (phiên, CSRF, giả lập người dùng) | FR-AUTH-06, FR-AUTH-08; kiểm thử quyền riêng cho web; review chéo mọi thay đổi chạm phiên đăng nhập |
 
 ## 15. Truy vết yêu cầu → thành phần
 
 | Nhóm yêu cầu | Thành phần chính |
 |---|---|
-| FR-AUTH, FR-AUD | C-01, C-02, C-03 |
+| FR-AUTH, FR-AUD | C-01, C-02, C-03, C-13 |
 | FR-ORG, FR-PLAN, FR-TASK, FR-ACT | C-01, C-02, C-03 |
-| FR-CHK | C-01, C-02, C-06, C-08 |
+| FR-CHK | C-01, C-02, C-06, C-08, C-13 |
 | FR-NTF | C-05, C-06 |
 | FR-AGG, FR-ACTN | C-06, C-02, C-03 |
 | FR-RULE | C-08, C-09, C-06 |

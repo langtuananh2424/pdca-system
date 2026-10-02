@@ -4,8 +4,8 @@
 | Mục | Giá trị |
 |---|---|
 | Mã tài liệu | AIA-SDD-001 |
-| Phiên bản | 0.1 (bản nháp) |
-| Ngày | 2026-10-01 |
+| Phiên bản | 0.2 (bản nháp, đang soạn) |
+| Ngày | 2026-10-02 |
 | Chuẩn tham chiếu | IEEE Std 1016-2009, Systems design – Software design descriptions |
 | Căn cứ | AIA-SRS-001, AIA-HLD-001 |
 | Chi tiết hóa tại | AIA-LLD-001 |
@@ -101,6 +101,7 @@ flowchart TB
         ACT[actions: đề xuất, duyệt, áp dụng]
         AGG[aggregation: tổng hợp theo cấp]
         AUD[audit]
+        TOOLS[tools: registry tool dùng chung]
         REPO[repositories: truy cập DB]
     end
     subgraph adapters[Adapter]
@@ -111,6 +112,7 @@ flowchart TB
         DOCA[docs: nguồn tài liệu P2]
     end
     subgraph apps[Ứng dụng]
+        WEBS[web_chat]
         MCPS[mcp_server]
         AGS[agent_service]
         SCHS[scheduler]
@@ -118,6 +120,9 @@ flowchart TB
         DSH[dashboard P2]
     end
     MCPS --> MCPA --> pdca_core
+    WEBS --> pdca_core
+    WEBS --> LLMA
+    WEBS --> RULEA
     AGS --> pdca_core
     AGS --> LLMA
     AGS --> CHA
@@ -130,7 +135,7 @@ flowchart TB
 
 | Mô-đun | Trách nhiệm | Yêu cầu chính |
 |---|---|---|
-| `authz` | Xây `UserContext` từ token; hàm `can(user, action, resource)`; mặc định từ chối | FR-AUTH-01..04, NFR-SEC-02 |
+| `authz` | Xây `UserContext` từ token (MCP) hoặc phiên đăng nhập (web); hàm `can(user, action, resource)`; mặc định từ chối | FR-AUTH-01..04, FR-AUTH-06, NFR-SEC-02 |
 | `org` | Người dùng, phòng, quan hệ báo cáo, project, thành viên | FR-ORG-01..05 |
 | `plans` | Cây kế hoạch, kiểm tra khoảng thời gian, phiên bản | FR-PLAN-01..06 |
 | `tasks` | Task, giao việc, lịch sử trạng thái, hoạt động | FR-TASK, FR-ACT |
@@ -138,6 +143,7 @@ flowchart TB
 | `actions` | Đề xuất, duyệt, áp dụng, phiên bản | FR-ACTN |
 | `aggregation` | Chọn dữ liệu và dựng đầu vào tổng hợp theo cấp | FR-AGG |
 | `audit` | Ghi nhật ký chỉ thêm | FR-AUD |
+| `tools` | Registry tool: tên, lược đồ vào ra (`pydantic`), hành động phân quyền, hàm xử lý. Không import SDK MCP hay LLM; adapter MCP và web chat đọc registry để phơi tool | FR-AUTH-07 |
 | `mcp_adapter` | Ánh xạ tool MCP → hàm nghiệp vụ, đóng gói đầu ra, giới hạn kích thước | EIR-01, NFR-SEC-05 |
 | `llm` | `LLMClient`, định tuyến model, đo token, caching | FR-AGT-02..04, DC-04 |
 | `channels` | `ChannelAdapter`, hàng đợi gửi, giới hạn tin, khung giờ | FR-NTF, DC-08 |
@@ -378,13 +384,12 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> draft_by_agent: agent phân tích trả lời
-    [*] --> submitted: người dùng nộp trực tiếp
-    draft_by_agent --> submitted: người dùng xác nhận
+    [*] --> draft_by_agent: agent phân tích trả lời, hoặc trợ lý gọi submit_report
+    draft_by_agent --> submitted: người dùng bấm Duyệt trên web
     draft_by_agent --> not_reported: hết hạn, không xác nhận
     [*] --> not_reported: không phản hồi sau 1 lần nhắc
     not_reported --> submitted: nộp muộn
-    submitted --> submitted: bổ sung
+    submitted --> submitted: người dùng bổ sung trên web
 ```
 
 #### Task
@@ -529,6 +534,8 @@ run_job(job, scheduled_for):
 | Lớp nghiệp vụ dùng chung cho MCP, Agent, Dashboard | Agent gọi MCP như một client | Một bộ kiểm tra quyền, ít hop, dễ kiểm thử |
 | Quyền ở server, không dựa vào model | Dặn model "đừng nói" | Model không phải hàng rào bảo mật; tài liệu không có quyền không bao giờ vào ngữ cảnh |
 | Báo cáo `draft_by_agent` cần xác nhận | Agent tự ghi báo cáo | Tránh số liệu bịa, giữ lòng tin của nhân viên |
+| (v0.2) Xác nhận báo cáo là thao tác của người qua API web, không phải tool | Dặn model hỏi lại trước khi gọi `submit_report` | Ở Claude Code, prompt nằm ở máy khách nên không bảo đảm được; nút Duyệt trên web bảo đảm ở server |
+| (v0.2) Một registry tool cho web chat và MCP | Viết tool riêng cho từng cửa vào | Một chỗ khai báo quyền và lược đồ; ma trận quyền kiểm cả hai cửa |
 | Chỉ báo cáo đã duyệt đi lên | Gom toàn bộ chat/ghi chú | Riêng tư và khả thi pháp lý; không có API chính thức để trích lịch sử chat |
 | Đề xuất Action cần duyệt | Tự áp dụng | Trách nhiệm rõ, an toàn |
 | Stateless MCP | Có phiên | Dễ nhân bản; đặc tả đang đổi, tránh phụ thuộc phiên |
@@ -584,3 +591,4 @@ run_job(job, scheduled_for):
 | SDD-OI-03 | Lược đồ `config` của từng loại project (phần mềm, vận hành, đào tạo...) | FR-ORG-04 |
 | SDD-OI-04 | Ngưỡng confidence và số lần hỏi lại tối ưu cho `parse_reply`, cần đo bằng dữ liệu thật | FR-CHK-05 |
 | SDD-OI-05 | Chọn công cụ lịch gửi tin cụ thể sau khi chốt kênh nhắn tin | OI-01 |
+| SDD-OI-06 | Framework cho web chat (giao diện và streaming) và cách đăng nhập P1 | EIR-09, OI-11 |
