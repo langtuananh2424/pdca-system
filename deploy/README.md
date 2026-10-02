@@ -76,6 +76,8 @@ bí mật của hệ điều hành, kèm rule và lệnh `/pdca:chot-ngay`.
 
 ## 5. Cập nhật phiên bản
 
+Mặc định bản mới lên máy chủ tự động qua CI/CD (mục 7). Cập nhật tay khi cần:
+
 ```bash
 git pull
 docker compose -f deploy/docker-compose.yml --profile apps up -d --build
@@ -97,6 +99,42 @@ docker compose -f deploy/docker-compose.yml exec db psql -U postgres -d pdca -c 
 
 `role`: `staff`, `dept_head`, `director`, `admin` (LLD 2.1, bảng `users`).
 
+## 7. CI/CD: `develop` → `main` → máy chủ
+
+- `develop`: nhánh phát triển. PR tính năng nhắm vào `develop`; CI (`.github/workflows/ci.yml`,
+  job `check`) chạy ruff, mypy, pytest.
+- `main`: nhánh release. Mở PR `develop` → `main`; khi merge, CI chạy lại `check` rồi job
+  `deploy` SSH vào máy chủ, `git merge --ff-only` đúng commit đó và
+  `docker compose ... --profile apps up -d --build`.
+- PR từ fork chỉ chạy `check`, không đọc được secret và không triển khai.
+
+**Chuẩn bị trên máy chủ (một lần):**
+
+```bash
+sudo adduser --disabled-password deploy && sudo usermod -aG docker deploy
+sudo -iu deploy
+git clone https://github.com/langtuananh2424/pdca-system.git ~/pdca-system
+cd ~/pdca-system && sh deploy/init-env.sh pdca.congty.vn --no-seed
+ssh-keygen -t ed25519 -N '' -f ~/gha_deploy -C github-actions-deploy
+cat ~/gha_deploy.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
+cat ~/gha_deploy          # dán vào secret DEPLOY_SSH_KEY, rồi xóa: rm ~/gha_deploy*
+```
+
+Thư mục clone phải ở nhánh `main`, không có commit hay sửa đổi riêng (tệp `deploy/.env`
+đã gitignore nên được giữ nguyên).
+
+**Trên GitHub** — Settings → Environments → `production` (đặt *Deployment branches* chỉ `main`),
+thêm các secret:
+
+| Secret | Giá trị |
+|---|---|
+| `DEPLOY_HOST` | IP hoặc tên miền máy chủ |
+| `DEPLOY_USER` | `deploy` |
+| `DEPLOY_SSH_KEY` | Khóa riêng `~/gha_deploy` (cả dòng `BEGIN`/`END`) |
+| `DEPLOY_KNOWN_HOSTS` | Kết quả `ssh-keyscan -t ed25519 <host>` chạy từ máy tin cậy (đối chiếu fingerprint) |
+| `DEPLOY_PATH` | `/home/deploy/pdca-system` |
+| `DEPLOY_PORT` | (tùy chọn) cổng SSH nếu khác 22 |
+
 ## Sự cố thường gặp
 
 | Hiện tượng | Nguyên nhân / cách xử lý |
@@ -105,6 +143,8 @@ docker compose -f deploy/docker-compose.yml exec db psql -U postgres -d pdca -c 
 | `421` / `Invalid Host header` | `PDCA_DOMAIN` trong `deploy/.env` khác tên miền đang gọi; sửa rồi `up -d` lại. |
 | `unauthorized` | Token sai, hết hạn hoặc đã thu hồi; thiếu tiền tố `Bearer `. |
 | `claude mcp list` báo lỗi kết nối | Thử lệnh `curl` ở mục 3 trên cùng máy để tách lỗi mạng/TLS khỏi lỗi cấu hình Claude Code. |
+| Job `deploy` lỗi `Not possible to fast-forward` | Thư mục trên máy chủ có commit/sửa đổi riêng; `git status` rồi đưa về `origin/main`. |
+| Job `deploy` lỗi `Host key verification failed` | `DEPLOY_KNOWN_HOSTS` sai hoặc máy chủ đổi khóa; chạy lại `ssh-keyscan`. |
 | Đổi mật khẩu trong `.env` không có tác dụng | Mật khẩu DB chỉ đặt khi khởi tạo volume (`deploy/initdb/`); đổi bằng `ALTER ROLE` hoặc xóa volume `pdca_pgdata` (mất dữ liệu). |
 
 Ghi chú bảo mật: PostgreSQL chỉ mở trên `127.0.0.1` của máy chủ; `deploy/.env`
