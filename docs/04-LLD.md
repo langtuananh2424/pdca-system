@@ -829,6 +829,8 @@ Khung này minh họa cấu trúc; mật khẩu, đường dẫn bí mật, mạ
 
 Bản cục bộ đã cài đặt: `deploy/docker-compose.yml`. Lệch so với khung: Flyway đăng nhập bằng vai trò `flyway` (chủ sở hữu CSDL); login + mật khẩu của `flyway`, `pdca_app`, `pdca_readonly` tạo bởi `deploy/initdb/01-roles.sh` khi khởi tạo volume, còn quyền trên bảng do migration cấp; mật khẩu lấy từ `deploy/.env` (không commit); mcp/agent/scheduler/proxy thuộc profile `apps`; mcp lắng nghe cổng 8000 sau Caddy.
 
+Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <tên miền>` sinh `deploy/.env` (mật khẩu ngẫu nhiên, `--no-seed` bỏ dữ liệu mẫu); Caddy mở cổng 80 (Let's Encrypt HTTP-01, chuyển hướng) và 443; `PDCA_DOMAIN` vừa là tên miền chứng chỉ vừa là `MCP_ALLOWED_HOSTS`. Các bước và lệnh `claude mcp add`: `deploy/README.md`.
+
 ### 9.2 Sao lưu và khôi phục
 - `pg_dump` hằng ngày (cron), mã hóa, lưu ngoài máy chủ; giữ 30 bản ngày + 12 bản tháng (cấu hình được).
 - Kiểm thử khôi phục mỗi quý trên môi trường staging (NFR-REL-02).

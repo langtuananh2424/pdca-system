@@ -7,6 +7,7 @@
 # (chưa có entrypoint — chờ nhận trả lời). Profile "mail": Mailpit — SMTP giả
 # cho dev, xem thư ở http://localhost:8025 (đặt CHANNEL_KIND=email, SMTP_HOST=mailpit,
 # SMTP_PORT=1025, SMTP_SECURITY=none).
+# Triển khai lên máy chủ và nối Claude Code: deploy/README.md.
 name: pdca
 
 x-app: &app
@@ -124,6 +125,8 @@ services:
     environment:
       PDCA_DOMAIN: ${PDCA_DOMAIN:-localhost}
     ports:
+      # 80: Let's Encrypt (HTTP-01) và chuyển hướng sang HTTPS; 443: MCP qua TLS.
+      - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
