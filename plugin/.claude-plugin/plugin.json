@@ -1,0 +1,36 @@
+{
+  "name": "pdca",
+  "displayName": "Trợ lý PDCA",
+  "description": "Rule công ty/phòng ban, lệnh chốt ngày và kết nối MCP Server PDCA",
+  "author": {
+    "name": "Lăng Tuấn Anh"
+  },
+  "keywords": [
+    "pdca",
+    "bao-cao-ngay"
+  ],
+  "userConfig": {
+    "server_url": {
+      "type": "string",
+      "title": "Địa chỉ MCP Server",
+      "description": "URL endpoint /mcp do quản trị cung cấp, ví dụ https://pdca.congty.vn/mcp",
+      "required": true
+    },
+    "api_token": {
+      "type": "string",
+      "title": "API token",
+      "description": "Token cá nhân (bắt đầu bằng pdca_) do quản trị cấp; lưu trong kho bí mật của máy",
+      "required": true,
+      "sensitive": true
+    },
+    "department": {
+      "type": "string",
+      "title": "Phòng ban",
+      "description": "Chọn phòng của bạn để nạp rule phòng ban khi mở phiên",
+      "required": true,
+      "options": [
+        "thu-nghiem-a"
+      ]
+    }
+  }
+}

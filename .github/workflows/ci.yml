@@ -36,6 +36,9 @@ jobs:
       - name: Mypy
         run: uv run mypy
 
+      - name: Rule trong plugin khớp rules/
+        run: uv run pdca-admin rules build --check
+
       # Runner ubuntu có sẵn Docker nên test tích hợp (Testcontainers) chạy được tại đây.
       - name: Pytest
         run: uv run pytest

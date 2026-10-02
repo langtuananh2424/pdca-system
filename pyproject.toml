@@ -12,6 +12,9 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.scripts]
+pdca-admin = "apps.admin_cli.__main__:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.2",
@@ -52,6 +55,10 @@ mypy_path = "src"
 packages = ["pdca_core", "adapters", "apps"]
 strict = true
 warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]  # APScheduler 3.x không có type hint
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

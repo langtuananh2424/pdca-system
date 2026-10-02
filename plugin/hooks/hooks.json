@@ -1,0 +1,16 @@
+{
+  "description": "Nạp rule công ty + phòng ban đã ghép vào đầu mỗi phiên (FR-RULE-02, FR-RULE-03)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
