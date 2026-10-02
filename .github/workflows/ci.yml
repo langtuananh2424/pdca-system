@@ -106,7 +106,8 @@ jobs:
           git merge --ff-only "$SHA"
           docker compose -f deploy/docker-compose.yml --profile apps up -d --build --remove-orphans
           docker compose -f deploy/docker-compose.yml --profile apps ps
-          docker image prune -f >/dev/null
+          # Chỉ dọn image của project pdca: máy chủ có thể chạy dự án khác.
+          docker image prune -f --filter label=com.docker.compose.project=pdca >/dev/null
           REMOTE
 
       - name: Dọn khóa SSH
