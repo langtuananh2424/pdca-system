@@ -37,4 +37,7 @@ dựng MCP Server + Caddy (`https://localhost/mcp`). Cấp token:
 docker compose -f deploy/docker-compose.yml exec mcp pdca-admin token issue --email staff.a1@example.com
 ```
 
+Triển khai lên máy chủ (tên miền + Let's Encrypt) và nối Claude Code bằng
+`claude mcp add`: `deploy/README.md`.
+
 Lộ trình cài đặt P1: LLD mục 12.
