@@ -123,7 +123,7 @@ cat ~/gha_deploy          # dán vào secret DEPLOY_SSH_KEY, rồi xóa: rm ~/gh
 Thư mục clone phải ở nhánh `main`, không có commit hay sửa đổi riêng (tệp `deploy/.env`
 đã gitignore nên được giữ nguyên).
 
-**Trên GitHub** — Settings → Environments → `production` (đặt *Deployment branches* chỉ `main`),
+**Trên GitHub** — Settings → Environments → `production` (mục *Deployment branches and tags*: chọn *Selected branches and tags*, thêm `main`),
 thêm các secret:
 
 | Secret | Giá trị |
