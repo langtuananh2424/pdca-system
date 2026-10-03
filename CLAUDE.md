@@ -124,7 +124,8 @@ lời (Agent Service, cần chốt LLM — OI-04).
 
 Đã có đặc tả (chưa cài đặt) cho hỏi cấp trên: SRS UC-18/FR-ASK, LLD V6 + mục 4.2
 (`ask_superior`, `get_my_questions`, `answer_question`, `cancel_question`) + 5.10,
-SDD 4.10, ADR-014; bước 11 của LLD 12.
+SDD 4.10, ADR-014; bước 11 của LLD 12. Người nhận do `resolve_recipient` chọn: trưởng
+phòng trực thuộc, hoặc cấp kế tiếp khi vị trí đó trống (OI-11 đã chốt hướng này).
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
-(OI-04), hook Claude Code (OI-09), hỏi vượt cấp (OI-11).
+(OI-04), hook Claude Code (OI-09).

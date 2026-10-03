@@ -420,7 +420,7 @@ stateDiagram-v2
 
 ```mermaid
 stateDiagram-v2
-    [*] --> open: người hỏi gửi (người nhận lấy từ manager_id)
+    [*] --> open: người hỏi gửi (người nhận do hệ thống chọn)
     open --> answered: người nhận xác nhận gửi trả lời
     open --> declined: người nhận từ chối kèm lý do
     open --> expired: quá hạn, không trả lời
