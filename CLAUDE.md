@@ -119,7 +119,9 @@ nhắc việc: đã xong phần không phụ thuộc kênh (LLD 5.8 — `pdca_co
 `job_runner.run_job`, `apps/scheduler` chạy trong Compose với kênh `log`, V4
 `reports.source = 'system'`) và gửi email qua SMTP (LLD 5.9, V5 giãn cách thử
 lại, Mailpit cho dev: Compose profile `mail`). Triển khai lên máy chủ + nối
-Claude Code: `deploy/README.md` (`deploy/init-env.sh`). Còn lại: nhận + phân tích trả
+Claude Code: `deploy/README.md` (`deploy/init-env.sh`). Nhánh: phát triển trên
+`develop`, `main` là release; push lên `main` chạy CI rồi job `deploy` chạy trên self-hosted runner tại
+máy chủ (`deploy/README.md` mục 7). Còn lại: nhận + phân tích trả
 lời (Agent Service, cần chốt LLM — OI-04).
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM

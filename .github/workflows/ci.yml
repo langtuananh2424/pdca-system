@@ -1,16 +1,20 @@
 name: CI
 
+# Luồng nhánh: phát triển trên `develop`, PR `develop` → `main` để release.
+# Push lên `main` chạy kiểm tra rồi triển khai lên máy chủ (job `deploy`).
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
+    branches: [main, develop]
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Chỉ hủy lần chạy cũ của PR; không cắt ngang một lần triển khai trên main.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -42,3 +46,51 @@ jobs:
       # Runner ubuntu có sẵn Docker nên test tích hợp (Testcontainers) chạy được tại đây.
       - name: Pytest
         run: uv run pytest
+
+  # Triển khai: chỉ khi push lên main của chính repo, chạy trên self-hosted runner
+  # đặt tại máy chủ (máy chủ không có IP công khai, vào qua Cloudflare Tunnel).
+  # Runner phải mang nhãn `pdca`; repo public nên PR từ fork không bao giờ chạy
+  # job này (xem deploy/README.md mục 7 về duyệt workflow của fork).
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'langtuananh2424/pdca-system'
+    runs-on: [self-hosted, linux, pdca]
+    timeout-minutes: 20
+    environment:
+      name: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - name: Cập nhật mã và khởi động lại stack
+        env:
+          # Thư mục clone cố định trên máy chủ, chứa deploy/.env (gitignore).
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEPLOY_PATH" ]; then
+            echo "::error::Thiếu biến DEPLOY_PATH (environment production)"; exit 1
+          fi
+          cd "$DEPLOY_PATH"
+          # Triển khai đúng commit vừa qua kiểm tra; deploy/.env giữ nguyên.
+          git fetch --quiet origin main
+          git checkout --quiet main
+          git merge --ff-only "$GITHUB_SHA"
+          docker compose -f deploy/docker-compose.yml --profile apps up -d --build --remove-orphans
+          docker compose -f deploy/docker-compose.yml --profile apps ps
+          # Chỉ dọn image của project pdca: máy chủ chạy chung với dự án khác.
+          docker image prune -f --filter label=com.docker.compose.project=pdca >/dev/null
+
+      - name: Kiểm tra MCP Server trả lời
+        env:
+          MCP_HTTP_PORT: ${{ vars.MCP_HTTP_PORT || '8010' }}
+        run: |
+          # Không token → phải nhận `unauthorized` (LLD 4.3), chứng tỏ server đã lên.
+          for i in $(seq 1 30); do
+            body=$(curl -s "http://localhost:${MCP_HTTP_PORT}/mcp" \
+              -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"whoami","arguments":{}}}' || true)
+            case "$body" in *unauthorized*) echo "MCP Server OK"; exit 0;; esac
+            sleep 2
+          done
+          echo "::error::MCP Server không trả lời trên cổng ${MCP_HTTP_PORT}"; echo "$body"; exit 1
