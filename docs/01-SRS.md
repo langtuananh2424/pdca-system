@@ -363,7 +363,7 @@ flowchart TB
 | Mã | Yêu cầu | Ưu tiên | Pha |
 |---|---|---|---|
 | FR-ASK-01 | Người dùng phải gửi được câu hỏi hoặc vướng mắc (≤ 2000 ký tự) tới cấp trên của mình (người nhận theo FR-ASK-02), tùy chọn gắn project và task thuộc phạm vi của người hỏi. | M | P1 |
-| FR-ASK-02 | Người nhận phải do hệ thống xác định từ cơ cấu tổ chức (FR-ORG-02), không nhận từ tham số do model truyền: là trưởng phòng trực thuộc đang hoạt động; khi vị trí đó trống (không có, bị khóa hoặc đã xóa) thì là cấp kế tiếp trong chuỗi quản lý (hỏi vượt cấp, OI-11). Không gửi được cho người ngang cấp, cấp dưới hay ngoài chuỗi quản lý. | M | P1 |
+| FR-ASK-02 | Người nhận phải do hệ thống xác định từ cơ cấu tổ chức (FR-ORG-02), không nhận từ tham số do model truyền: là trưởng phòng trực thuộc đang hoạt động; khi vị trí đó trống (không có, bị khóa hoặc đã xóa; nghỉ phép không tính) thì là cấp kế tiếp trong chuỗi quản lý (hỏi vượt cấp, OI-11). Không gửi được cho người ngang cấp, cấp dưới hay ngoài chuỗi quản lý. | M | P1 |
 | FR-ASK-03 | Câu hỏi và câu trả lời chỉ người hỏi và người nhận đọc được; mọi người khác, kể cả cấp trên của người nhận và quản trị, nhận `forbidden_or_not_found`. | M | P1 |
 | FR-ASK-04 | Câu trả lời chỉ tới người hỏi sau khi người nhận chủ động xác nhận gửi; AI không được tự gửi hay tự trả lời thay người nhận. | M | P1 |
 | FR-ASK-05 | Câu hỏi phải có vòng đời `open → answered, declined, expired, cancelled`; quá hạn cấu hình thì chuyển `expired` và báo người hỏi; hệ thống không suy đoán câu trả lời. | M | P1 |

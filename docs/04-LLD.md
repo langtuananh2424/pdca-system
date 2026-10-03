@@ -493,7 +493,7 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
     1. Đi theo chuỗi `manager_id` từ người gọi, tối đa 3 bước, lấy người đầu tiên `active`, chưa xóa, vai trò `dept_head`/`director`. Trưởng phòng trực thuộc đang hoạt động thì dừng ngay ở đó; nếu vị trí đó trống (không có `manager_id`, bị khóa hoặc đã xóa) thì chuỗi đi tiếp lên cấp kế tiếp — đó là **hỏi vượt cấp**.
     2. Chuỗi đứt mà không tìm được ai: lấy `director` đang hoạt động nếu có đúng một người.
     3. Còn lại → `invalid_argument` (quản trị cần cấu hình `manager_id`).
-    Không bao giờ chọn chính người gọi. Người nhận ghi vào `questions.recipient_id` lúc hỏi; trưởng phòng hoạt động trở lại sau đó không làm đổi người nhận của câu hỏi cũ.
+    Chỉ vị trí trống mới kích hoạt vượt cấp: `away_until` (nghỉ phép) **không** được xét, trưởng phòng đang nghỉ vẫn là người nhận và câu hỏi chờ ở đó tới `due_at`. Không bao giờ chọn chính người gọi. Người nhận ghi vào `questions.recipient_id` lúc hỏi; trưởng phòng hoạt động trở lại sau đó không làm đổi người nhận của câu hỏi cũ.
   - Kiểm tra: `resolve_recipient` tìm được người nhận (không thì `invalid_argument`); `project_id` là project người hỏi là thành viên và `task_id` là task giao cho người hỏi trong project đó (không thì `forbidden_or_not_found`); hạn mức `QUESTION_MAX_OPEN`, `QUESTION_MAX_PER_DAY` (vượt thì `rate_limited`).
   - Ghi `questions` (`due_at` = now + `QUESTION_TTL_DAYS`) và `outbound_messages` (`kind = question_notice`, `dedupe_key = question_notice:{id}`) trong **một giao dịch**.
   - Đầu ra: `{question_id, recipient_name, status, due_at}`. Quyền: `question.ask`.
@@ -954,6 +954,7 @@ Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <t�
 | T-15 | (P2) Có bản nháp `draft_by_agent` nhưng người nhận chưa xác nhận | Người hỏi không thấy nháp, không có `answer_notice` | AC-10 |
 | T-16 | Người hỏi vượt `QUESTION_MAX_OPEN` hoặc `QUESTION_MAX_PER_DAY` | `rate_limited`, không tạo thêm câu hỏi | FR-ASK-07 |
 | T-17 | Trưởng phòng trực thuộc bị khóa (hoặc vị trí trống); nhân viên gọi `ask_superior`, rồi trưởng phòng được mở khóa và nhân viên hỏi thêm một câu | Câu đầu tới cấp kế tiếp (vượt cấp) và giữ nguyên người nhận; câu sau tới trưởng phòng | AC-09, FR-ASK-02 |
+| T-17b | Trưởng phòng trực thuộc có `away_until` ≥ hôm nay; nhân viên gọi `ask_superior` | Câu hỏi vẫn tới trưởng phòng (không vượt cấp) | FR-ASK-02 |
 | T-18 | Chuỗi `manager_id` đứt, có hai giám đốc hoạt động; hoặc người gọi là giám đốc không có `manager_id` | `invalid_argument`, không tạo câu hỏi | FR-ASK-02 |
 
 ## 11. Xử lý lỗi và tình huống biên
