@@ -387,6 +387,7 @@ Tùy chọn thay thế (Java/Spring AI MCP) chưa được kiểm tra mức hoà
 | ADR-011 | Agent Service dùng chung lớp nghiệp vụ với MCP, không gọi qua MCP vòng ngoài | Một bộ kiểm tra quyền, bớt hop mạng | Hai cửa vào phải cùng giữ hợp đồng |
 | ADR-012 | Không dùng đường truy cập model vi phạm điều khoản (ví dụ proxy dùng OAuth của IDE) | Rủi ro khóa tài khoản và lộ dữ liệu | Bị giới hạn ở nhà cung cấp chính thức |
 | ADR-013 | Pilot trên gói cá nhân chỉ với dữ liệu ít nhạy cảm; trước khi dùng dữ liệu thật chuyển sang API/Team | Điều khoản dữ liệu của gói cá nhân | Chi phí tăng khi chạy thật |
+| ADR-014 | Hỏi cấp trên: người nhận lấy từ cơ cấu (không từ tham số); trợ lý của người nhận chỉ soạn nháp, người nhận duyệt rồi mới gửi | Giữ FR-SB-01/02, ADR-009, ADR-010: nội dung riêng của cấp trên không ra ngoài khi họ chưa xem | Trả lời chậm hơn tự động hóa hoàn toàn |
 
 ## 13. Lộ trình triển khai theo pha
 
