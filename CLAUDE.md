@@ -120,7 +120,7 @@ nhắc việc: đã xong phần không phụ thuộc kênh (LLD 5.8 — `pdca_co
 `reports.source = 'system'`) và gửi email qua SMTP (LLD 5.9, V5 giãn cách thử
 lại, Mailpit cho dev: Compose profile `mail`). Triển khai lên máy chủ + nối
 Claude Code: `deploy/README.md` (`deploy/init-env.sh`). Nhánh: phát triển trên
-`develop`, `main` là release; push lên `main` chạy CI rồi job `deploy` SSH vào
+`develop`, `main` là release; push lên `main` chạy CI rồi job `deploy` chạy trên self-hosted runner tại
 máy chủ (`deploy/README.md` mục 7). Còn lại: nhận + phân tích trả
 lời (Agent Service, cần chốt LLM — OI-04).
 
