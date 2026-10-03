@@ -532,7 +532,7 @@ flowchart TB
 | OI-08 | Xác nhận pháp lý về xử lý dữ liệu cá nhân của nhân viên. | Pháp chế | NFR-PRV-03 |
 | OI-09 | Hook Claude Code: tên hook, tham số hiện hành cần kiểm tra trước khi làm. | Lăng Tuấn Anh | FR-ACT-03 |
 | OI-10 | Đặc tả MCP còn thay đổi; cần theo dõi bản phát hành. | Lăng Tuấn Anh | GA-05 |
-| OI-11 | Hướng đã chốt (2026-10-03): chỉ hỏi vượt cấp khi không có trưởng phòng trực thuộc đang hoạt động; khi đó hỏi cấp kế tiếp trong chuỗi quản lý (LLD 4.2, `resolve_recipient`). Còn mở: khi chuỗi đứt hẳn và có nhiều giám đốc thì chọn ai (hiện: từ chối, quản trị phải cấu hình `manager_id`). | Thầy Phúc | FR-ASK-02 |
+| OI-11 | Hướng đã chốt (2026-10-03): chỉ hỏi vượt cấp khi không có trưởng phòng trực thuộc đang hoạt động; khi đó hỏi cấp kế tiếp trong chuỗi quản lý (LLD 4.2, `resolve_recipient`). Chuỗi đứt hẳn (thiếu `manager_id`…) thì từ chối, không chuyển cho giám đốc ngoài chuỗi; quản trị phải cấu hình `manager_id` đầy đủ trước khi nạp dữ liệu thật. | Thầy Phúc | FR-ASK-02 |
 
 | Rủi ro | Mức | Giảm thiểu |
 |---|---|---|

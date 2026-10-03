@@ -21,36 +21,29 @@ def node(user_id: int, role: str, *, active: bool = True) -> OrgNode:
 
 def test_direct_dept_head_is_chosen() -> None:
     chain = [node(2, "dept_head"), node(3, "director")]
-    assert pick_recipient(chain, [node(3, "director")], ASKER) == chain[0]
+    assert pick_recipient(chain, ASKER) == chain[0]
 
 
 def test_vacant_dept_head_goes_to_next_level() -> None:
     """OI-11: trưởng phòng bị khóa/xóa → vượt cấp lên giám đốc."""
     chain = [node(2, "dept_head", active=False), node(3, "director")]
-    assert pick_recipient(chain, [], ASKER) == chain[1]
+    assert pick_recipient(chain, ASKER) == chain[1]
 
 
 def test_manager_with_wrong_role_is_skipped() -> None:
     chain = [node(2, "staff"), node(3, "dept_head")]
-    assert pick_recipient(chain, [], ASKER) == chain[1]
+    assert pick_recipient(chain, ASKER) == chain[1]
 
 
-def test_broken_chain_falls_back_to_single_director() -> None:
-    director = node(9, "director")
-    assert pick_recipient([], [director], ASKER) == director
-
-
-def test_broken_chain_with_several_directors_is_refused() -> None:
-    assert pick_recipient([], [node(9, "director"), node(10, "director")], ASKER) is None
-
-
-def test_no_candidate_at_all() -> None:
-    assert pick_recipient([], [], ASKER) is None
+def test_broken_chain_is_refused() -> None:
+    """Chuỗi đứt: không tìm người nhận ngoài chuỗi quản lý (FR-ASK-02)."""
+    assert pick_recipient([], ASKER) is None
+    assert pick_recipient([node(2, "staff"), node(3, "dept_head", active=False)], ASKER) is None
 
 
 def test_asker_is_never_the_recipient() -> None:
     me = node(ASKER, "director")
-    assert pick_recipient([me], [me], ASKER) is None
+    assert pick_recipient([me], ASKER) is None
 
 
 # --- next_delivery ---

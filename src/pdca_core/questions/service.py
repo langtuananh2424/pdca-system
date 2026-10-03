@@ -47,23 +47,20 @@ class QuestionSettings:
     max_per_day: int = 10
 
 
-def pick_recipient(
-    chain: Sequence[OrgNode], directors: Sequence[OrgNode], asker_id: int
-) -> OrgNode | None:
+def pick_recipient(chain: Sequence[OrgNode], asker_id: int) -> OrgNode | None:
     """Chọn người nhận (LLD 4.2 `resolve_recipient`, FR-ASK-02, OI-11).
 
     `chain`: các cấp trên theo `manager_id`, gần nhất trước (đã cắt ở `MAX_CHAIN_STEPS`).
     1) Người đầu tiên đang hoạt động, vai trò trưởng phòng/giám đốc. Trưởng phòng trực thuộc
        còn hoạt động thì dừng ngay; vị trí đó trống (khóa/xóa/không có) thì đi tiếp lên cấp
        kế tiếp — hỏi vượt cấp. Nghỉ phép (`away_until`) không làm vị trí trống.
-    2) Chuỗi đứt: giám đốc đang hoạt động nếu đúng một người.
-    3) Còn lại: `None`.
+    2) Chuỗi đứt (không ai đủ điều kiện trong `chain`): `None`. Không tìm người nhận ngoài chuỗi
+       quản lý của người hỏi (FR-ASK-02); quản trị phải cấu hình `manager_id`.
     """
     for node in chain:
         if node.user_id != asker_id and node.active and node.role in RECIPIENT_ROLES:
             return node
-    eligible = [d for d in directors if d.user_id != asker_id]
-    return eligible[0] if len(eligible) == 1 else None
+    return None
 
 
 def resolve_recipient(conn: Connection[Any], asker_id: int) -> OrgNode:
@@ -77,7 +74,7 @@ def resolve_recipient(conn: Connection[Any], asker_id: int) -> OrgNode:
         current = repo.org_node(conn, current.manager_id)
         if current is not None:
             chain.append(current)
-    recipient = pick_recipient(chain, repo.active_directors(conn, asker_id), asker_id)
+    recipient = pick_recipient(chain, asker_id)
     if recipient is None:
         raise InvalidArgument("no recipient available for this question")
     return recipient

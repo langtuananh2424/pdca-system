@@ -346,17 +346,30 @@ def test_t17b_away_dept_head_is_not_vacant(app: Conn) -> None:
     assert service.resolve_recipient(app, staff).user_id == head
 
 
-def test_t18_broken_chain_needs_exactly_one_director(app: Conn) -> None:
+def test_t18_broken_chain_is_refused_even_with_one_director(app: Conn) -> None:
+    """Không có bước "giám đốc duy nhất": người không có cấp trên đủ điều kiện thì bị từ chối."""
     director = seed_director_id(app)
-    orphan = make_user(app, "staff", dept_id=department_id(app))  # không có manager_id
     app.execute(
         "update users set status = 'locked' where role = 'director' and id <> %s", (director,)
     )
-    assert service.resolve_recipient(app, orphan).user_id == director
-
-    make_user(app, "director")  # giám đốc thứ hai đang hoạt động
+    orphan = make_user(app, "staff", dept_id=department_id(app))  # không có manager_id
     with pytest.raises(InvalidArgument):
         service.resolve_recipient(app, orphan)
+
+    wrong_role = make_user(app, "staff")  # manager_id trỏ tới nhân viên không có cấp trên
+    with pytest.raises(InvalidArgument):
+        service.resolve_recipient(app, make_user(app, "staff", manager_id=wrong_role))
+
+
+def test_t18_chain_longer_than_three_steps_is_refused(app: Conn) -> None:
+    director = seed_director_id(app)
+    top = make_user(app, "staff", manager_id=director)
+    s3 = make_user(app, "staff", manager_id=top)
+    s2 = make_user(app, "staff", manager_id=s3)
+    s1 = make_user(app, "staff", manager_id=s2)
+    # s1 → s2 → s3 → top → director: giám đốc ở bước thứ 4, ngoài giới hạn 3 bước.
+    with pytest.raises(InvalidArgument):
+        service.resolve_recipient(app, s1)
 
 
 def test_t18_director_without_superior_cannot_ask(app: Conn) -> None:

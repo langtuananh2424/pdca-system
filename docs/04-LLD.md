@@ -491,8 +491,7 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
 #### `ask_superior` / `get_my_questions` / `answer_question` / `cancel_question`
 - `ask_superior`: `body` (≤ 2000), `project_id?`, `task_id?`. **Không có tham số người nhận**: người nhận do `resolve_recipient(người gọi)` chọn (FR-ASK-02, bất biến 3), theo thứ tự:
     1. Đi theo chuỗi `manager_id` từ người gọi, tối đa 3 bước, lấy người đầu tiên `active`, chưa xóa, vai trò `dept_head`/`director`. Trưởng phòng trực thuộc đang hoạt động thì dừng ngay ở đó; nếu vị trí đó trống (không có `manager_id`, bị khóa hoặc đã xóa) thì chuỗi đi tiếp lên cấp kế tiếp — đó là **hỏi vượt cấp**.
-    2. Chuỗi đứt mà không tìm được ai: lấy `director` đang hoạt động nếu có đúng một người.
-    3. Còn lại → `invalid_argument` (quản trị cần cấu hình `manager_id`).
+    2. Chuỗi đứt (không ai đủ điều kiện trong tối đa 3 bước: thiếu `manager_id`, trỏ sai vai trò, cả chuỗi bị khóa/xóa) → `invalid_argument`; quản trị cần cấu hình `manager_id`. Hệ thống **không** tìm người nhận ngoài chuỗi quản lý của người hỏi (FR-ASK-02) — kể cả khi chỉ có một giám đốc.
     Chỉ vị trí trống mới kích hoạt vượt cấp: `away_until` (nghỉ phép) **không** được xét, trưởng phòng đang nghỉ vẫn là người nhận và câu hỏi chờ ở đó tới `due_at`. Không bao giờ chọn chính người gọi. Người nhận ghi vào `questions.recipient_id` lúc hỏi; trưởng phòng hoạt động trở lại sau đó không làm đổi người nhận của câu hỏi cũ.
   - Kiểm tra: `resolve_recipient` tìm được người nhận (không thì `invalid_argument`); `project_id` là project người hỏi là thành viên và `task_id` là task giao cho người hỏi trong project đó (không thì `forbidden_or_not_found`); hạn mức `QUESTION_MAX_OPEN`, `QUESTION_MAX_PER_DAY` (vượt thì `rate_limited`).
   - Ghi `questions` (`due_at` = now + `QUESTION_TTL_DAYS`) và `outbound_messages` (`kind = question_notice`, `dedupe_key = question_notice:{id}`) trong **một giao dịch**.
@@ -507,7 +506,7 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
 
 #### Ghi chú cài đặt — hỏi cấp trên (P1 bước 11)
 - **Lệch thiết kế**: tham số `as` của `get_my_questions` đổi thành `side` (`as` là từ khóa Python); `task_id` của `ask_superior` bắt buộc đi kèm `project_id` (`invalid_argument` nếu thiếu); job tên `question_expire` (như các job khác, `JOB_QUESTION_EXPIRE_CRON`, mặc định mỗi giờ `0 * * * *`).
-- `resolve_recipient` = hàm thuần `pick_recipient` (chuỗi `manager_id` ≤ 3 bước, gặp vòng thì dừng; giám đốc duy nhất; còn lại `invalid_argument`) + truy vấn trong `pdca_core/questions/service.py`. Nghỉ phép không làm vị trí trống (T-17b).
+- `resolve_recipient` = hàm thuần `pick_recipient` (chuỗi `manager_id` ≤ 3 bước, gặp vòng thì dừng; chuỗi đứt thì `invalid_argument`) + truy vấn trong `pdca_core/questions/service.py`. Nghỉ phép không làm vị trí trống (T-17b).
 - Hạn mức: đếm `open` và số câu trong ngày địa phương của người hỏi dưới khóa advisory theo người hỏi, nên hai lời gọi song song không vượt hạn mức.
 - Tin báo: `question_notice`/`answer_notice` soạn bằng mẫu (`questions/notices.py`), chỉ có tên, mã câu hỏi và trạng thái. Người nhận tin nghỉ phép hoặc ngoài giờ làm thì `outbound_messages.next_attempt_at` hoãn tới đầu giờ làm kế tiếp (`questions/delivery.py`); câu hỏi vẫn `open`. Tiến trình `mcp` phải có cùng `CHANNEL_KIND` với `scheduler` (bộ gửi chỉ lấy tin của kênh nó chạy; `deploy/docker-compose.yml` đã truyền).
 - `answer_question` vẫn nhận được khi câu hỏi `open` nhưng quá `due_at` cho tới khi job đánh dấu `expired` (tối đa một giờ); sau đó `conflict`. Hai bên cùng khóa dòng nên không có câu vừa trả lời vừa hết hạn.
@@ -965,7 +964,7 @@ Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <t�
 | T-16 | Người hỏi vượt `QUESTION_MAX_OPEN` hoặc `QUESTION_MAX_PER_DAY` | `rate_limited`, không tạo thêm câu hỏi | FR-ASK-07 |
 | T-17 | Trưởng phòng trực thuộc bị khóa (hoặc vị trí trống); nhân viên gọi `ask_superior`, rồi trưởng phòng được mở khóa và nhân viên hỏi thêm một câu | Câu đầu tới cấp kế tiếp (vượt cấp) và giữ nguyên người nhận; câu sau tới trưởng phòng | AC-09, FR-ASK-02 |
 | T-17b | Trưởng phòng trực thuộc có `away_until` ≥ hôm nay; nhân viên gọi `ask_superior` | Câu hỏi vẫn tới trưởng phòng (không vượt cấp) | FR-ASK-02 |
-| T-18 | Chuỗi `manager_id` đứt, có hai giám đốc hoạt động; hoặc người gọi là giám đốc không có `manager_id` | `invalid_argument`, không tạo câu hỏi | FR-ASK-02 |
+| T-18 | Chuỗi `manager_id` đứt (không có `manager_id`, trỏ sai vai trò, giám đốc ở bước thứ 4) hoặc người gọi là giám đốc không có cấp trên — kể cả khi chỉ còn một giám đốc hoạt động | `invalid_argument`, không tạo câu hỏi | FR-ASK-02 |
 
 ## 11. Xử lý lỗi và tình huống biên
 

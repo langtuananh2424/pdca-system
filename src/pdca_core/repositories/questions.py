@@ -88,19 +88,6 @@ def org_node(conn: Connection[Any], user_id: int) -> OrgNode | None:
         ).fetchone()
 
 
-def active_directors(conn: Connection[Any], exclude_user_id: int) -> list[OrgNode]:
-    with conn.cursor(row_factory=class_row(OrgNode)) as cur:
-        return cur.execute(
-            """
-            select id as user_id, role, name, manager_id, true as active
-            from users
-            where role = 'director' and status = 'active' and deleted_at is null and id <> %s
-            order by id
-            """,
-            (exclude_user_id,),
-        ).fetchall()
-
-
 def lock_asker(conn: Connection[Any], asker_id: int) -> None:
     """Tuần tự hóa các lần hỏi của một người để đếm hạn mức không bị vượt khi chạy song song."""
     conn.execute(
