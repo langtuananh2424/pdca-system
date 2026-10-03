@@ -22,6 +22,9 @@ class Action(StrEnum):
     BLOCKERS_READ_TEAM = "blockers.read.team"
     PLAN_READ = "plan.read"
     PLAN_WRITE = "plan.write"
+    QUESTION_ASK = "question.ask"
+    QUESTION_ANSWER = "question.answer"
+    QUESTION_READ_OWN = "question.read.own"
     ACTION_DECIDE = "action.decide"
     SUMMARY_READ = "summary.read"
     USER_MANAGE = "user.manage"
@@ -41,6 +44,7 @@ class Scope(StrEnum):
 _OWN_STAFF_UP = {Role.STAFF: Scope.OWN, Role.DEPT_HEAD: Scope.OWN, Role.DIRECTOR: Scope.OWN}
 _TEAM = {Role.DEPT_HEAD: Scope.DEPARTMENT, Role.DIRECTOR: Scope.ALL}
 _ADMIN = {Role.ADMIN: Scope.ALL}
+_OWN_HEADS = {Role.DEPT_HEAD: Scope.OWN, Role.DIRECTOR: Scope.OWN}
 
 # LLD bảng 3.2 — nguồn dữ liệu của bộ kiểm thử ma trận quyền.
 MATRIX: dict[Action, dict[Role, Scope]] = {
@@ -54,6 +58,11 @@ MATRIX: dict[Action, dict[Role, Scope]] = {
     Action.BLOCKERS_READ_TEAM: _TEAM,
     Action.PLAN_READ: {Role.STAFF: Scope.PROJECT, **_TEAM},
     Action.PLAN_WRITE: {Role.STAFF: Scope.OWN, **_TEAM},
+    # FR-ASK: `ask`/`read.own` kiểm tra người hỏi hoặc người nhận là chính người gọi (Scope.OWN);
+    # `answer` chỉ người nhận, nên chỉ trưởng phòng/giám đốc (LLD 3.2). Admin không có `question.*`.
+    Action.QUESTION_ASK: _OWN_STAFF_UP,
+    Action.QUESTION_ANSWER: _OWN_HEADS,
+    Action.QUESTION_READ_OWN: _OWN_STAFF_UP,
     Action.ACTION_DECIDE: _TEAM,
     Action.SUMMARY_READ: _TEAM,
     Action.USER_MANAGE: _ADMIN,

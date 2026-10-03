@@ -497,13 +497,23 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
   - Kiểm tra: `resolve_recipient` tìm được người nhận (không thì `invalid_argument`); `project_id` là project người hỏi là thành viên và `task_id` là task giao cho người hỏi trong project đó (không thì `forbidden_or_not_found`); hạn mức `QUESTION_MAX_OPEN`, `QUESTION_MAX_PER_DAY` (vượt thì `rate_limited`).
   - Ghi `questions` (`due_at` = now + `QUESTION_TTL_DAYS`) và `outbound_messages` (`kind = question_notice`, `dedupe_key = question_notice:{id}`) trong **một giao dịch**.
   - Đầu ra: `{question_id, recipient_name, status, due_at}`. Quyền: `question.ask`.
-- `get_my_questions`: `as: "asker"|"recipient"`, `status?`, `limit?`, `cursor?`. Đầu ra: danh sách `{id, asker_name, recipient_name, body, project_id, task_id, status, created_at, due_at, answer?: {body, sent_at}, decline_reason?}`, mới nhất trước. Bản nháp `draft_by_agent` (P2) chỉ nằm trong trường `draft` của kết quả `as="recipient"`, không bao giờ ở `as="asker"`. Quyền: `question.read.own`.
+- `get_my_questions`: `side: "asker"|"recipient"`, `status?`, `limit?`, `cursor?`. Đầu ra: danh sách `{id, asker_name, recipient_name, body, project_id, task_id, status, created_at, due_at, answer?: {body, sent_at}, decline_reason?}`, mới nhất trước. Bản nháp `draft_by_agent` (P2) chỉ nằm trong trường `draft` của kết quả `side="recipient"`, không bao giờ ở `side="asker"`. Quyền: `question.read.own`.
 - `answer_question`: `question_id`, `action: "send"|"decline"`, `body` (bắt buộc khi `send`, ≤ 2000), `reason` (bắt buộc khi `decline`, ≤ 2000).
   - Chỉ gọi sau khi người dùng đã xem và xác nhận nội dung (như `submit_report`, bất biến 6); skill phải hỏi xác nhận trước khi gọi.
   - Khóa dòng `for update`; câu hỏi không còn `open` → `conflict`. `send`: ghi `question_answers(status='sent')`, câu hỏi → `answered`; `decline`: câu hỏi → `declined`, ghi `decline_reason`. Cả hai xếp `answer_notice` (`dedupe_key = answer_notice:{question_id}`) trong cùng giao dịch.
   - Quyền: `question.answer` (người nhận, câu hỏi `open`).
 - `cancel_question`: `question_id`; chỉ người hỏi, chỉ khi `open` (nếu không `conflict`) → `cancelled`. Quyền: `question.ask` với `asker_id = người gọi`.
 - Tin báo `question_notice`/`answer_notice` soạn bằng mẫu, có dòng "Trợ lý AI PDCA…" (FR-NTF-03) và **không** chứa nội dung câu hỏi hay câu trả lời; người nhận đọc trong Claude Code. Tham số audit (`params_redacted`) chỉ ghi `question_id`, `action` và độ dài `body`/`reason`, không ghi nội dung (FR-ASK-08).
+
+#### Ghi chú cài đặt — hỏi cấp trên (P1 bước 11)
+- **Lệch thiết kế**: tham số `as` của `get_my_questions` đổi thành `side` (`as` là từ khóa Python); `task_id` của `ask_superior` bắt buộc đi kèm `project_id` (`invalid_argument` nếu thiếu); job tên `question_expire` (như các job khác, `JOB_QUESTION_EXPIRE_CRON`, mặc định mỗi giờ `0 * * * *`).
+- `resolve_recipient` = hàm thuần `pick_recipient` (chuỗi `manager_id` ≤ 3 bước, gặp vòng thì dừng; giám đốc duy nhất; còn lại `invalid_argument`) + truy vấn trong `pdca_core/questions/service.py`. Nghỉ phép không làm vị trí trống (T-17b).
+- Hạn mức: đếm `open` và số câu trong ngày địa phương của người hỏi dưới khóa advisory theo người hỏi, nên hai lời gọi song song không vượt hạn mức.
+- Tin báo: `question_notice`/`answer_notice` soạn bằng mẫu (`questions/notices.py`), chỉ có tên, mã câu hỏi và trạng thái. Người nhận tin nghỉ phép hoặc ngoài giờ làm thì `outbound_messages.next_attempt_at` hoãn tới đầu giờ làm kế tiếp (`questions/delivery.py`); câu hỏi vẫn `open`. Tiến trình `mcp` phải có cùng `CHANNEL_KIND` với `scheduler` (bộ gửi chỉ lấy tin của kênh nó chạy; `deploy/docker-compose.yml` đã truyền).
+- `answer_question` vẫn nhận được khi câu hỏi `open` nhưng quá `due_at` cho tới khi job đánh dấu `expired` (tối đa một giờ); sau đó `conflict`. Hai bên cùng khóa dòng nên không có câu vừa trả lời vừa hết hạn.
+- `get_my_questions`: sắp theo `id` giảm dần, `next_cursor` là khóa keyset `[id]` (base64url). Chỉ câu trả lời `sent` được trả; bản nháp `draft_by_agent` (P2) không bao giờ lọt vào kết quả cho người hỏi.
+- Audit: `redact_params` giữ nguyên `action`, `side` (không phải nội dung); `body`, `reason` chỉ còn độ dài.
+- Kiểm thử: `tests/unit/test_questions.py`, `tests/integration/test_question_tools.py` (T-11..T-13, T-16..T-18), `tests/permission_matrix/test_questions_matrix.py`, dòng `question.*` trong `test_can_matrix.py`. T-14, T-15 thuộc P2.
 
 #### P2: `get_summary`, `list_action_proposals`, `decide_action`, `search_docs`
 - `get_summary`: `scope`, `scope_id`, `period_kind`, `period_start`.
@@ -690,8 +700,8 @@ Kênh thật (email) làm sau (OI-01); phần dưới chạy với kênh `log` (
 
 ### 5.10 Hỏi cấp trên (FR-ASK)
 
-- **Mô-đun**: `pdca_core/questions/` (`service.py` — `ask`, `list_for`, `answer`, `cancel`, `expire_overdue`; `prepare_draft` ở P2); bảng `questions`, `question_answers` (V6). MCP chỉ gọi hàm này qua `run_tool` (bất biến 1, 2).
-- **Job `QUESTION_EXPIRE`** (mỗi giờ; `run_job` như 5.8): `open` và `due_at < now()` → `expired`, xếp `answer_notice` (`dedupe_key = answer_notice:{id}`). Không sinh câu trả lời thay người nhận (FR-ASK-05).
+- **Mô-đun**: `pdca_core/questions/` (`service.py` — `ask`, `list_mine`, `answer`, `cancel`, `expire_overdue`, `resolve_recipient`; `delivery.py`, `notices.py`; `prepare_draft` ở P2); bảng `questions`, `question_answers` (V6). MCP chỉ gọi hàm này qua `run_tool` (bất biến 1, 2).
+- **Job `question_expire`** (mỗi giờ; `run_job` như 5.8): `open` và `due_at < now()` → `expired`, xếp `answer_notice` (`dedupe_key = answer_notice:{id}`). Không sinh câu trả lời thay người nhận (FR-ASK-05).
 - **Gửi tin**: dùng chung outbox và `ChannelSender` (5.8). Tin do người dùng kích hoạt nên không tính vào `NTF_MAX_PER_DAY` của nhắc việc, nhưng bị chặn bởi `QUESTION_MAX_*`; vẫn tôn trọng khung giờ làm việc và `away_until` của người nhận (câu hỏi giữ `open`, tin chờ tới đầu giờ).
 - **P2 — soạn nháp `draft_answer`** (cần LLM — OI-04; nguồn second brain cần FR-SB). Agent Service gọi thẳng `pdca_core.questions.prepare_draft` (ADR-011), không qua MCP:
   1. Thu nguồn bằng `authz.can` của **người nhận**: báo cáo `submitted`, kế hoạch, task trong phạm vi của họ và (khi có FR-SB) kết quả tìm trong second brain của chính họ. Không đọc gì ngoài quyền của người nhận.
@@ -841,7 +851,7 @@ Dự kiến dùng hook của Claude Code khi kết thúc phiên để gợi ý g
 | `LLM_API_KEY` | agent | Khóa API, lấy từ kho bí mật |
 | `LLM_MODEL_SMALL/MEDIUM/LARGE` | agent | Tên model theo mức |
 | `LLM_MONTHLY_BUDGET_USD` | agent | Hạn mức tháng |
-| `CHANNEL_KIND` | agent, scheduler | `log` (dev, chỉ ghi log) hoặc `email` |
+| `CHANNEL_KIND` | agent, scheduler, mcp | `log` (dev, chỉ ghi log) hoặc `email` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`, `SMTP_REPLY_TO`, `SMTP_TIMEOUT_SECONDS` | scheduler | Kênh email (5.9); mật khẩu chỉ ở biến môi trường/kho bí mật |
 | `CHANNEL_CREDENTIALS` | agent | Thông tin kênh |
 | `RULES_REPO_URL`, `RULES_REF` | agent | Kho rule và nhánh/thẻ |
@@ -985,7 +995,7 @@ Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <t�
 | 8 | Adapter kênh đầu tiên + `outbox` + job nhắc việc/hỏi tiến độ | Check chủ động |
 | 9 | Bộ kiểm thử ma trận quyền + prompt injection + chịu tải | Tiêu chí AC |
 | 10 | Triển khai staging, pilot 2-3 người, sau đó 3-5 người | Số liệu thật |
-| 11 | Hỏi cấp trên (FR-ASK P1): V6, bốn tool, job `QUESTION_EXPIRE`, hai lệnh plugin, ca T-11..T-13 và T-16..T-18 vào bộ ma trận quyền; có thể làm trước bước 9 | UC-18 |
+| 11 | Hỏi cấp trên (FR-ASK P1): V6, bốn tool, job `question_expire`, hai lệnh plugin, ca T-11..T-13 và T-16..T-18 vào bộ ma trận quyền; có thể làm trước bước 9 | UC-18 |
 
 Sau pilot, đo: tỷ lệ báo cáo đúng mẫu, tỷ lệ phải sửa lại bản nháp, số tin/người/ngày, chi phí LLM thực tế; dùng số liệu này để chốt P2.
 

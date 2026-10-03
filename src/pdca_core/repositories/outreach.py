@@ -129,16 +129,20 @@ def enqueue(
     kind: str,
     payload: dict[str, Any],
     dedupe_key: str,
+    next_attempt_at: datetime | None = None,
 ) -> int | None:
-    """Xếp hàng tin; trả None nếu `dedupe_key` đã có (chạy lại job không gửi trùng)."""
+    """Xếp hàng tin; trả None nếu `dedupe_key` đã có (chạy lại job không gửi trùng).
+
+    `next_attempt_at` hoãn việc gửi tới thời điểm đó (bộ gửi bỏ qua tin chưa tới giờ, V5).
+    """
     row = conn.execute(
         """
-        insert into outbound_messages (user_id, channel, kind, payload, dedupe_key)
-        values (%s, %s, %s, %s, %s)
+        insert into outbound_messages (user_id, channel, kind, payload, dedupe_key, next_attempt_at)
+        values (%s, %s, %s, %s, %s, %s)
         on conflict (dedupe_key) do nothing
         returning id
         """,
-        (user_id, channel, kind, Jsonb(payload), dedupe_key),
+        (user_id, channel, kind, Jsonb(payload), dedupe_key, next_attempt_at),
     ).fetchone()
     return None if row is None else int(row[0])
 
