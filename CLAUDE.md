@@ -39,8 +39,8 @@ Docker Compose + Caddy.
 db/migration/   Flyway V{n}__{mô_tả}.sql — nguồn DDL duy nhất
 db/seed/        dữ liệu dev (R__, idempotent) — không nạp ở staging/prod
 src/pdca_core/  lớp nghiệp vụ: authz org plans tasks reports outreach questions actions aggregation audit repositories (+ `tools`, đích v0.2, chưa có)
-src/adapters/   mcp llm channels rules docs
-src/apps/       web_chat mcp_server agent_service scheduler admin_cli dashboard
+src/adapters/   mcp channels rules (đã có); llm docs (khung rỗng)
+src/apps/       mcp_server scheduler admin_cli (đã có); agent_service dashboard (khung rỗng); web_chat (đích v0.2, chưa có)
 src/config/
 rules/          rule công ty/phòng ban (Markdown + YAML front matter)
 plugin/         plugin Claude Code: skill chot-ngay, hook rule, .mcp.json (rules/ trong đó là tệp sinh)
@@ -98,7 +98,7 @@ deploy/         docker-compose, Dockerfile, Caddyfile
   (`tests/permission_matrix/`, tham số hóa từ LLD bảng 3.2), chạy trên cả hai
   cửa vào (token MCP và phiên web).
 - Thay đổi chạm tới prompt/phân tích trả lời: thêm ca prompt injection.
-- Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
+- Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pdca-admin rules build --check && uv run pytest` (khớp các bước của CI).
 
 ## Trạng thái hiện tại
 Xong LLD mục 12 bước 1–7: khung dự án, CI, Docker Compose cục bộ (`deploy/`;

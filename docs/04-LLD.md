@@ -684,7 +684,7 @@ async def submit_report(project_id: int, done: str, blockers: str = "",
 |---|---|---|
 | `morning_nudge` | T2-T6 08:30 | Nhắc việc trong ngày |
 | `progress_ask` | T2-T6 16:45 | Hỏi tiến độ |
-| `progress_remind` | T2-T6 17:45 | Nhắc lại một lần cho người chưa trả lời |
+| `progress_remind` | T2-T6 17:15 | Nhắc lại một lần cho người chưa trả lời (17:45 nằm ngoài giờ làm mặc định; xem 5.8) |
 | `mark_not_reported` | T2-T6 18:30 | Đặt `not_reported` cho người chưa có báo cáo |
 | `aggregate_department` (P2) | T2-T6 19:00 | Tổng hợp phòng |
 | `aggregate_company` (P2) | T2-T6 19:30 | Tổng hợp công ty |
@@ -829,16 +829,18 @@ Mỗi mục rule có khóa và cờ `mandatory: true|false` ở phần đầu t�
 ### 7.1 Nội dung
 ```text
 plugin/
-├─ rules/                    # bản dựng sẵn từ rules/ (company + department)
-├─ commands/
-│  ├─ chot-ngay.md           # lệnh /chot-ngay
-│  ├─ viec-cua-toi.md        # lệnh xem task
-│  ├─ hoi-cap-tren.md        # lệnh /hoi-cap-tren (FR-ASK, P1) — gọi ask_superior
-│  └─ cau-hoi-den-toi.md     # lệnh xem và trả lời câu hỏi nhận được; hỏi xác nhận trước answer_question
-├─ .mcp.json                 # trỏ MCP server, token lấy từ biến môi trường
+├─ .claude-plugin/plugin.json   # manifest, userConfig (server_url, api_token, department)
+├─ .mcp.json                    # trỏ MCP server
+├─ hooks/                       # SessionStart: nạp rule ghép sẵn
+├─ rules/                       # bản dựng sẵn từ rules/ (company + department), tệp sinh
+├─ skills/
+│  ├─ chot-ngay/SKILL.md        # /pdca:chot-ngay
+│  ├─ viec-cua-toi/SKILL.md     # /pdca:viec-cua-toi
+│  ├─ hoi-cap-tren/SKILL.md     # /pdca:hoi-cap-tren (FR-ASK, P1) — gọi ask_superior
+│  └─ cau-hoi-den-toi/SKILL.md  # /pdca:cau-hoi-den-toi — xem và trả lời câu hỏi nhận được; hỏi xác nhận trước answer_question
 └─ README.md
 ```
-Cú pháp, thư mục và tên tệp chính xác của plugin, lệnh và cấu hình MCP phải theo tài liệu Claude Code phiên bản đang dùng.
+Bố cục trên là bản đã cài đặt (lệnh dùng skill, không dùng `commands/`; token qua `userConfig`, không qua biến môi trường); lý do và chi tiết ở 7.5.
 
 ### 7.2 Cấu hình MCP phía máy khách (ví dụ minh họa)
 ```json
@@ -886,6 +888,8 @@ plugin/
 ├─ rules/_company.md, <phòng>.md    # sinh bởi `pdca-admin rules build` từ rules/
 ├─ skills/chot-ngay/SKILL.md        # /pdca:chot-ngay
 ├─ skills/viec-cua-toi/SKILL.md     # /pdca:viec-cua-toi
+├─ skills/hoi-cap-tren/SKILL.md     # /pdca:hoi-cap-tren
+├─ skills/cau-hoi-den-toi/SKILL.md  # /pdca:cau-hoi-den-toi
 └─ README.md
 ```
 
@@ -979,7 +983,7 @@ volumes: { pgdata: {} }
 ```
 Khung này minh họa cấu trúc; mật khẩu, đường dẫn bí mật, mạng, khối lượng sao lưu và cấu hình TLS cần hoàn thiện theo môi trường thực.
 
-Bản cục bộ đã cài đặt: `deploy/docker-compose.yml`. Lệch so với khung: Flyway đăng nhập bằng vai trò `flyway` (chủ sở hữu CSDL); login + mật khẩu của `flyway`, `pdca_app`, `pdca_readonly` tạo bởi `deploy/initdb/01-roles.sh` khi khởi tạo volume, còn quyền trên bảng do migration cấp; mật khẩu lấy từ `deploy/.env` (không commit); mcp/agent/scheduler/proxy thuộc profile `apps`; mcp lắng nghe cổng 8000 sau Caddy.
+Bản cục bộ đã cài đặt: `deploy/docker-compose.yml`. Lệch so với khung: Flyway đăng nhập bằng vai trò `flyway` (chủ sở hữu CSDL); login + mật khẩu của `flyway`, `pdca_app`, `pdca_readonly` tạo bởi `deploy/initdb/01-roles.sh` khi khởi tạo volume, còn quyền trên bảng do migration cấp; mật khẩu lấy từ `deploy/.env` (không commit); `mcp` và `scheduler` thuộc profile `apps`; `agent` thuộc profile `workers` (entrypoint `apps.agent_service` chưa có); `proxy` (Caddy) thuộc profile `caddy`; `mailpit` thuộc profile `mail`; `mcp` lắng nghe cổng 8000 trong container, công bố ra `127.0.0.1:${MCP_HTTP_PORT}` cho nginx/Caddy phía trước.
 
 Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <tên miền>` sinh `deploy/.env` (mật khẩu ngẫu nhiên, `--no-seed` bỏ dữ liệu mẫu); Caddy mở cổng 80 (Let's Encrypt HTTP-01, chuyển hướng) và 443; `PDCA_DOMAIN` vừa là tên miền chứng chỉ vừa là `MCP_ALLOWED_HOSTS`. Các bước và lệnh `claude mcp add`: `deploy/README.md`.
 
