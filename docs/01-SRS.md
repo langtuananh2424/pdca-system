@@ -4,7 +4,7 @@
 | Mục | Giá trị |
 |---|---|
 | Mã tài liệu | AIA-SRS-001 |
-| Phiên bản | 0.1 (bản nháp) |
+| Phiên bản | 0.2 (bản nháp) |
 | Ngày | 2026-10-01 |
 | Chuẩn tham chiếu | ISO/IEC/IEEE 29148:2018 (Requirements engineering) |
 | Tác giả | Lăng Tuấn Anh (IT / Backend) |
@@ -18,6 +18,7 @@
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 0.1 | 2026-10-01 | Bản nháp đầu tiên, dựa trên sơ đồ tổng quan và các trao đổi ý tưởng |
+| 0.2 | 2026-10-03 | Thêm UC-18 và nhóm FR-ASK (hỏi cấp trên, người nhận duyệt rồi mới trả lời), AC-09..10, OI-11 |
 
 ---
 
@@ -183,6 +184,7 @@ flowchart TB
 | UC-15 | Quản lý second brain | ACT-01..03 | P2 |
 | UC-16 | Xem dashboard | ACT-02, ACT-03 | P2 |
 | UC-17 | Tra cứu nhật ký kiểm toán | ACT-04 | P1 |
+| UC-18 | Hỏi cấp trên khi vướng mắc | ACT-01..03 (người hỏi), ACT-02..03 (người trả lời) | P1; AI soạn nháp: P2 |
 
 ### UC-04 Chốt ngày và nộp báo cáo (mẫu chi tiết)
 
@@ -206,6 +208,18 @@ flowchart TB
 | Luồng thay thế | 5a) Không trả lời: nhắc lại một lần, sau đó đánh dấu `not_reported`, không suy đoán. |
 | Hậu điều kiện | Có báo cáo hoặc dấu "chưa báo cáo" cho ngày đó. |
 | Yêu cầu liên quan | FR-NTF-01..07, FR-CHK-05..06 |
+
+### UC-18 Hỏi cấp trên khi vướng mắc
+
+| Mục | Nội dung |
+|---|---|
+| Tác nhân chính | Người hỏi (nhân viên hoặc trưởng phòng), người trả lời (cấp trên trực tiếp) |
+| Tiền điều kiện | Cả hai đã xác thực và đang hoạt động; hệ thống xác định được người nhận (trưởng phòng trực thuộc, hoặc cấp kế tiếp khi vị trí đó trống — FR-ASK-02) |
+| Luồng chính | 1) Người hỏi gõ câu hỏi trong Claude Code, có thể gắn project/task. 2) Hệ thống xác định người nhận từ cơ cấu tổ chức (không phải tham số), kiểm tra hạn mức, lưu câu hỏi `open`. 3) Hệ thống báo cho người trả lời qua kênh đã cấu hình; tin chỉ nêu có câu hỏi mới, không kèm nội dung. 4) Người trả lời mở danh sách câu hỏi nhận được trong Claude Code. 5) (P2) Trợ lý của người trả lời soạn bản nháp từ nguồn được phép, kèm trích dẫn; bản nháp chỉ người trả lời thấy. 6) Người trả lời viết hoặc sửa, rồi xác nhận gửi. 7) Hệ thống lưu câu trả lời, câu hỏi thành `answered`, báo cho người hỏi. |
+| Luồng thay thế | 1a) Người hỏi rút câu hỏi khi còn `open` → `cancelled`. 2a) Không xác định được người nhận hoặc vượt hạn mức → từ chối. 6a) Người trả lời từ chối kèm lý do → `declined`. 6b) Quá hạn không trả lời → `expired`, người hỏi được báo; hệ thống không tự trả lời thay. |
+| Ngoại lệ | Người khác (kể cả cấp trên của người trả lời và quản trị) xem hoặc trả lời → `forbidden_or_not_found`. |
+| Hậu điều kiện | Câu hỏi ở trạng thái cuối; chỉ người hỏi và người trả lời đọc được nội dung; có audit (không chứa nội dung). |
+| Yêu cầu liên quan | FR-ASK-01..11, FR-AUTH-02, FR-AGT-05, FR-SB-01..02, FR-AUD-01, NFR-PRV-01 |
 
 ---
 
@@ -344,6 +358,22 @@ flowchart TB
 | FR-AGT-04 | Agent service phải đo và ghi lại token và chi phí theo tác vụ. | S | P2 |
 | FR-AGT-05 | Nội dung do người dùng nhập (báo cáo, ghi chú) phải được coi là dữ liệu không đáng tin, không được thực thi như chỉ thị. | M | P1 |
 
+### 4.13 Hỏi cấp trên (ASK)
+
+| Mã | Yêu cầu | Ưu tiên | Pha |
+|---|---|---|---|
+| FR-ASK-01 | Người dùng phải gửi được câu hỏi hoặc vướng mắc (≤ 2000 ký tự) tới cấp trên của mình (người nhận theo FR-ASK-02), tùy chọn gắn project và task thuộc phạm vi của người hỏi. | M | P1 |
+| FR-ASK-02 | Người nhận phải do hệ thống xác định từ cơ cấu tổ chức (FR-ORG-02), không nhận từ tham số do model truyền: là trưởng phòng trực thuộc đang hoạt động; khi vị trí đó trống (không có, bị khóa hoặc đã xóa; nghỉ phép không tính) thì là cấp kế tiếp trong chuỗi quản lý (hỏi vượt cấp, OI-11). Không gửi được cho người ngang cấp, cấp dưới hay ngoài chuỗi quản lý. | M | P1 |
+| FR-ASK-03 | Câu hỏi và câu trả lời chỉ người hỏi và người nhận đọc được; mọi người khác, kể cả cấp trên của người nhận và quản trị, nhận `forbidden_or_not_found`. | M | P1 |
+| FR-ASK-04 | Câu trả lời chỉ tới người hỏi sau khi người nhận chủ động xác nhận gửi; AI không được tự gửi hay tự trả lời thay người nhận. | M | P1 |
+| FR-ASK-05 | Câu hỏi phải có vòng đời `open → answered, declined, expired, cancelled`; quá hạn cấu hình thì chuyển `expired` và báo người hỏi; hệ thống không suy đoán câu trả lời. | M | P1 |
+| FR-ASK-06 | Hệ thống phải báo qua kênh (outbox) khi có câu hỏi mới và khi có trả lời, từ chối hoặc hết hạn; nội dung tin không chứa nội dung câu hỏi hay câu trả lời. | M | P1 |
+| FR-ASK-07 | Hệ thống phải giới hạn số câu hỏi đang mở và số câu hỏi mỗi ngày của mỗi người (cấu hình), vượt thì `rate_limited`. | M | P1 |
+| FR-ASK-08 | Nội dung câu hỏi là dữ liệu không đáng tin, không được thực thi như chỉ thị (FR-AGT-05); mọi lời gọi ghi audit (FR-AUD-01) và audit không chứa nội dung câu hỏi hay câu trả lời. | M | P1 |
+| FR-ASK-09 | Trợ lý của người nhận phải soạn được bản nháp trả lời từ nguồn người nhận được phép đọc (báo cáo `submitted`, kế hoạch, task trong phạm vi), kèm trích dẫn nguồn; bản nháp chỉ người nhận thấy, mang trạng thái `draft_by_agent`. | M | P2 |
+| FR-ASK-10 | Nội dung second brain (FR-SB-01) chỉ được đưa vào câu trả lời qua bản nháp mà chủ sở hữu đã xem và duyệt từng lần; không bao giờ tự động, và không sao chép nội dung ghi chú vào audit hay log. | M | P2 |
+| FR-ASK-11 | Agent chỉ gửi LLM đoạn tối thiểu liên quan tới câu hỏi (NFR-PRV-01) và bọc câu hỏi trong khối dữ liệu không đáng tin. | S | P2 |
+
 ---
 
 ## 5. Yêu cầu phi chức năng (NFR)
@@ -467,6 +497,7 @@ flowchart TB
 | UC-15 | FR-SB-01..03 |
 | UC-16 | FR-DASH-01..03 |
 | UC-17 | FR-AUD-01..03 |
+| UC-18 | FR-ASK-01..11, FR-AUTH-02, FR-AGT-05 |
 
 ---
 
@@ -482,6 +513,8 @@ flowchart TB
 | AC-06 | Bản tổng hợp cấp trên không chứa nội dung second brain hoặc chat thô. | FR-AGG-04, NFR-PRV-01 |
 | AC-07 | Mọi lời gọi tool trong thời gian thử nghiệm đều có bản ghi audit. | FR-AUD-01 |
 | AC-08 | Chạy lại tác vụ định kỳ hai lần không tạo bản ghi hoặc tin nhắn trùng. | NFR-REL-03 |
+| AC-09 | Chỉ người hỏi và người nhận đọc được một câu hỏi và câu trả lời của nó; trưởng phòng khác, giám đốc, quản trị đều bị từ chối; câu hỏi luôn tới người nhận do hệ thống xác định (FR-ASK-02) bất kể model truyền gì. | FR-ASK-02..03, FR-AUTH-02 |
+| AC-10 | Không có câu trả lời nào tới người hỏi khi người nhận chưa xác nhận gửi; nội dung second brain không xuất hiện trong câu trả lời nếu chủ sở hữu chưa duyệt. | FR-ASK-04, FR-ASK-10 |
 
 ---
 
@@ -499,6 +532,7 @@ flowchart TB
 | OI-08 | Xác nhận pháp lý về xử lý dữ liệu cá nhân của nhân viên. | Pháp chế | NFR-PRV-03 |
 | OI-09 | Hook Claude Code: tên hook, tham số hiện hành cần kiểm tra trước khi làm. | Lăng Tuấn Anh | FR-ACT-03 |
 | OI-10 | Đặc tả MCP còn thay đổi; cần theo dõi bản phát hành. | Lăng Tuấn Anh | GA-05 |
+| OI-11 | Hướng đã chốt (2026-10-03): chỉ hỏi vượt cấp khi không có trưởng phòng trực thuộc đang hoạt động; khi đó hỏi cấp kế tiếp trong chuỗi quản lý (LLD 4.2, `resolve_recipient`). Chuỗi đứt hẳn (thiếu `manager_id`…) thì từ chối, không chuyển cho giám đốc ngoài chuỗi; quản trị phải cấu hình `manager_id` đầy đủ trước khi nạp dữ liệu thật. | Thầy Phúc | FR-ASK-02 |
 
 | Rủi ro | Mức | Giảm thiểu |
 |---|---|---|
@@ -508,3 +542,4 @@ flowchart TB
 | Đặc tả MCP/SDK thay đổi | Trung bình | Stateless, khóa phiên bản, kiểm thử tích hợp |
 | Prompt injection qua nội dung báo cáo | Trung bình | FR-AGT-05, NFR-SEC-06 |
 | Chi phí LLM vượt dự kiến | Trung bình | NFR-COST-01, định tuyến model, caching |
+| Hỏi dồn dập hoặc dùng trợ lý cấp trên để thăm dò dữ liệu riêng | Trung bình | FR-ASK-03, FR-ASK-04, FR-ASK-07, FR-ASK-10 |

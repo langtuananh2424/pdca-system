@@ -80,6 +80,11 @@ services:
       RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-60}
       OUTPUT_MAX_ROWS: ${OUTPUT_MAX_ROWS:-100}
       OUTPUT_MAX_BYTES: ${OUTPUT_MAX_BYTES:-51200}
+      # Hỏi cấp trên (FR-ASK): kênh phải trùng scheduler để bộ gửi lấy được tin báo.
+      CHANNEL_KIND: ${CHANNEL_KIND:-log}
+      QUESTION_TTL_DAYS: ${QUESTION_TTL_DAYS:-3}
+      QUESTION_MAX_OPEN: ${QUESTION_MAX_OPEN:-5}
+      QUESTION_MAX_PER_DAY: ${QUESTION_MAX_PER_DAY:-10}
     ports:
       # Chỉ loopback: nginx trên máy chủ (hoặc client cục bộ) gọi http://127.0.0.1:<cổng>/mcp.
       - "127.0.0.1:${MCP_HTTP_PORT:-8010}:8000"
@@ -117,11 +122,13 @@ services:
       SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
       NTF_MAX_PER_DAY: ${NTF_MAX_PER_DAY:-3}
       OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
+      QUESTION_TTL_DAYS: ${QUESTION_TTL_DAYS:-3}
       # Để trống = lịch mặc định (LLD 5.2, apps/scheduler/settings.py).
       JOB_MORNING_NUDGE_CRON: ${JOB_MORNING_NUDGE_CRON:-}
       JOB_PROGRESS_ASK_CRON: ${JOB_PROGRESS_ASK_CRON:-}
       JOB_PROGRESS_REMIND_CRON: ${JOB_PROGRESS_REMIND_CRON:-}
       JOB_MARK_NOT_REPORTED_CRON: ${JOB_MARK_NOT_REPORTED_CRON:-}
+      JOB_QUESTION_EXPIRE_CRON: ${JOB_QUESTION_EXPIRE_CRON:-}
 
   proxy:
     image: caddy:2-alpine

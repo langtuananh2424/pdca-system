@@ -11,6 +11,7 @@ DEFAULT_SCHEDULES = {
     "progress_ask": "45 16 * * mon-fri",
     "progress_remind": "15 17 * * mon-fri",
     "mark_not_reported": "30 18 * * mon-fri",
+    "question_expire": "0 * * * *",  # mỗi giờ (LLD 5.10)
 }
 
 
@@ -22,6 +23,7 @@ class Settings:
     max_messages_per_day: int
     outbox_max_attempts: int
     outbox_interval_seconds: int
+    question_ttl_days: int = 3
     schedules: dict[str, str] = field(default_factory=dict)
 
     @classmethod
@@ -40,5 +42,6 @@ class Settings:
             max_messages_per_day=int(env.get("NTF_MAX_PER_DAY", "3")),
             outbox_max_attempts=int(env.get("OUTBOX_MAX_ATTEMPTS", "5")),
             outbox_interval_seconds=int(env.get("OUTBOX_INTERVAL_SECONDS", "60")),
+            question_ttl_days=int(env.get("QUESTION_TTL_DAYS", "3")),
             schedules=schedules,
         )

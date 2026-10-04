@@ -127,7 +127,7 @@ claude mcp add --transport http pdca https://pdca.congty.vn/mcp \
 claude mcp list          # pdca: ... (HTTP) - √ Connected
 ```
 
-Trong phiên Claude Code: `/mcp` thấy server `pdca` với 15 tool; thử hỏi
+Trong phiên Claude Code: `/mcp` thấy server `pdca` với 19 tool; thử hỏi
 "gọi tool whoami của pdca" hoặc "việc của tôi hôm nay".
 
 Lệnh trên lưu token dạng rõ trong `~/.claude.json`, chỉ nên dùng để thử. Cho

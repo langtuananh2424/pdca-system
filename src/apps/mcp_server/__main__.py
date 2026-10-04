@@ -9,6 +9,7 @@ from adapters.mcp.server import ToolDeps, build_server
 from apps import json_logging
 from apps.mcp_server.settings import Settings
 from pdca_core.output_limits import OutputLimits
+from pdca_core.questions.service import QuestionSettings
 from pdca_core.ratelimit import RateLimiter
 from pdca_core.repositories.audit import PgAuditRepository
 from pdca_core.repositories.tokens import PgTokenRepository
@@ -21,6 +22,12 @@ def create_app(settings: Settings, pool: ConnectionPool) -> Starlette:
         audit=PgAuditRepository(pool),
         limits=OutputLimits(max_rows=settings.output_max_rows, max_bytes=settings.output_max_bytes),
         rate_limiter=RateLimiter(settings.rate_limit_per_min),
+        questions=QuestionSettings(
+            channel=settings.channel_kind,
+            ttl_days=settings.question_ttl_days,
+            max_open=settings.question_max_open,
+            max_per_day=settings.question_max_per_day,
+        ),
     )
     return build_server(deps).streamable_http_app(
         stateless_http=True,

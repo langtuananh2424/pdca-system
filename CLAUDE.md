@@ -17,7 +17,7 @@ chung code, quy ước hay migration.
   toán `can`, ghép rule, idempotency job (4.11).
 - `docs/04-LLD.md` — **nguồn chính khi code**: DDL (mục 2), token + ma trận
   quyền chi tiết (mục 3), đặc tả từng MCP tool (mục 4), job/agent (5), plugin
-  (7), biến môi trường (8), ca kiểm thử T-01..T-10 (10), lộ trình P1 (12).
+  (7), biến môi trường (8), ca kiểm thử T-01..T-18 (10), lộ trình P1 (12).
 
 Khi implement một tool/job: đọc đúng mục LLD tương ứng, dùng đúng tên bảng,
 cột, trạng thái, mã lỗi đã thiết kế — không tự đặt lại. Nếu cần lệch thiết
@@ -123,6 +123,12 @@ Claude Code: `deploy/README.md` (`deploy/init-env.sh`). Nhánh: phát triển tr
 `develop`, `main` là release; push lên `main` chạy CI rồi job `deploy` chạy trên self-hosted runner tại
 máy chủ (`deploy/README.md` mục 7). Còn lại: nhận + phân tích trả
 lời (Agent Service, cần chốt LLM — OI-04).
+
+Đã cài đặt hỏi cấp trên P1 (LLD 12 bước 11; SRS UC-18/FR-ASK, ADR-014): V6, tool
+`ask_superior`, `get_my_questions`, `answer_question`, `cancel_question` (ghi chú:
+LLD 4.2), `pdca_core/questions`, job `question_expire` trong scheduler, skill
+`/pdca:hoi-cap-tren`, `/pdca:cau-hoi-den-toi`. Agent soạn nháp (FR-ASK-09..11) là P2. Người nhận do `resolve_recipient` chọn: trưởng
+phòng trực thuộc, hoặc cấp kế tiếp khi vị trí đó trống (OI-11 đã chốt hướng này).
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09).
