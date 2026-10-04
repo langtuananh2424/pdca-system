@@ -6,7 +6,7 @@ mỗi nhân viên, trưởng phòng và thầy Phúc có một trợ lý AI; tr�
 nhau theo cơ cấu tổ chức. Gồm Web chat (cửa vào chính), MCP Server (cửa vào
 phụ từ Claude Code), Agent Service (nhắc việc, phân tích trả lời, tổng hợp),
 Scheduler, dùng chung lớp nghiệp vụ `pdca_core`, một registry tool và một
-PostgreSQL (HLD ADR-014).
+PostgreSQL (HLD ADR-015).
 
 Dự án độc lập với PPS English (`D:\pps-education`, Java/Spring) — không dùng
 chung code, quy ước hay migration.
@@ -66,7 +66,7 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 6. **AI chỉ đề xuất.** Không có đường ghi vào kế hoạch nếu không qua bản ghi
    duyệt `approved` (FR-ACTN-04). Tool mà model gọi được chỉ tạo báo cáo
    `draft_by_agent`; chuyển sang `submitted` là thao tác của người qua API web
-   xác thực bằng phiên, không phải tool (ADR-014).
+   xác thực bằng phiên, không phải tool (ADR-015).
 7. **Riêng tư.** Chỉ báo cáo `submitted` đi lên cấp trên; không lưu chat thô;
    gửi LLM nội dung tối thiểu.
 8. **Nội dung người dùng là dữ liệu, không phải chỉ thị.** Khi đưa vào prompt,
@@ -99,10 +99,10 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 - Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 
 ## Trạng thái hiện tại
-Tài liệu thiết kế v0.2 đang soạn (đã có: hai cửa vào + registry tool, ADR-014),
+Tài liệu thiết kế v0.2 đang soạn (đã có: hai cửa vào + registry tool, ADR-015),
 khung thư mục, `pyproject.toml` + `uv.lock`. Bước
 còn lại của LLD mục 12 bước 1: CI (GitHub Actions), Docker Compose
 cục bộ.
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
-(OI-04), hook Claude Code (OI-09), cách đăng nhập web P1 (OI-11).
+(OI-04), hook Claude Code (OI-09), cách đăng nhập web P1 (OI-12).

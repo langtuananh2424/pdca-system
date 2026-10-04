@@ -18,7 +18,7 @@
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 0.1 | 2026-10-01 | Bản nháp đầu tiên, dựa trên sơ đồ tổng quan và các trao đổi ý tưởng |
-| 0.2 | 2026-10-02 | (Đang soạn) Hai cửa vào song song: web chat là cửa chính, Claude Code + MCP là cửa phụ, dùng chung một registry tool (FR-AUTH-02, FR-AUTH-06..08, EIR-09, OI-03, OI-11). Báo cáo do trợ lý soạn luôn ở trạng thái nháp, người dùng xác nhận trên web (UC-04, NFR-USE-01) |
+| 0.2 | 2026-10-02 | (Đang soạn) Hai cửa vào song song: web chat là cửa chính, Claude Code + MCP là cửa phụ, dùng chung một registry tool (FR-AUTH-02, FR-AUTH-06..08, EIR-09, OI-03, OI-12). Báo cáo do trợ lý soạn luôn ở trạng thái nháp, người dùng xác nhận trên web (UC-04, NFR-USE-01) |
 
 ---
 
@@ -70,7 +70,7 @@ Tài liệu xác định yêu cầu cho Hệ thống Trợ lý AI phân cấp ("
 
 ### 1.5 Bối cảnh quyết định đã có
 - Đội kỹ thuật làm việc chủ yếu trên **Claude Code**; phần lớn nhân viên không dùng công cụ này.
-- **Hai cửa vào song song (v0.2):** web chat là cửa vào chính cho mọi người; Claude Code + MCP là cửa phụ cho người làm kỹ thuật. Hai cửa dùng chung lớp nghiệp vụ, phân quyền và registry tool (HLD ADR-014).
+- **Hai cửa vào song song (v0.2):** web chat là cửa vào chính cho mọi người; Claude Code + MCP là cửa phụ cho người làm kỹ thuật. Hai cửa dùng chung lớp nghiệp vụ, phân quyền và registry tool (HLD ADR-015).
 - Công ty **không dùng Active Directory**; người dùng và vai trò do chính Hệ thống quản lý.
 - **Claude Tag** (agent của Anthropic trong Slack) được khảo sát và **không chọn làm nền chính** vì: routine không nhắn riêng từng người, mọi người trong kênh có quyền như nhau, MCP server phải truy cập được qua internet. Có thể dùng bổ trợ ở pha sau.
 - Phương án chọn: **tự xây** MCP server + agent service + scheduler, dùng chung một backend dữ liệu.
@@ -222,7 +222,7 @@ flowchart TB
 | FR-AUTH-03 | Token phải được lưu dạng băm, có hạn dùng, có thể thu hồi và xoay vòng. | M | P1 |
 | FR-AUTH-04 | Hệ thống phải từ chối lời gọi khi token hoặc phiên đăng nhập sai, hết hạn, bị thu hồi hoặc tài khoản bị khóa, và ghi audit. | M | P1 |
 | FR-AUTH-05 | Hệ thống nên hỗ trợ OAuth 2.1 (PKCE, khám phá metadata) qua một nhà cung cấp danh tính ngoài, vẫn lấy vai trò từ bảng người dùng của Hệ thống. | S | P2 |
-| FR-AUTH-06 | Web chat phải xác thực bằng đăng nhập và phiên phía server: mã phiên lưu dạng băm, cookie `HttpOnly` + `Secure` + `SameSite`, có hạn dùng và thu hồi được. Cách đăng nhập P1 theo OI-11. | M | P1 |
+| FR-AUTH-06 | Web chat phải xác thực bằng đăng nhập và phiên phía server: mã phiên lưu dạng băm, cookie `HttpOnly` + `Secure` + `SameSite`, có hạn dùng và thu hồi được. Cách đăng nhập P1 theo OI-12. | M | P1 |
 | FR-AUTH-07 | Mọi cửa vào (web chat, MCP) phải dùng chung một registry tool: mỗi tool khai báo một lần với cùng tên, lược đồ vào ra, hành động phân quyền, và cùng đi qua `can` và audit. | M | P1 |
 | FR-AUTH-08 | Chế độ giả lập người dùng (đăng nhập thay người khác để thử) chỉ được bật khi môi trường là `dev`; ở `staging`/`prod` phải bị khóa ở server. | M | P1 |
 
@@ -497,7 +497,7 @@ flowchart TB
 |---|---|---|---|
 | OI-01 | Kênh nhắn tin nào (Slack, Teams, Zalo, email)? Zalo OA có giới hạn nhắn chủ động. | Lăng Tuấn Anh | FR-NTF-07, EIR-04 |
 | OI-02 | Quy mô công ty, số phòng ban, phòng thử nghiệm và số project? | Thầy Phúc | Chi phí, NFR-PERF |
-| OI-03 | ~~Thầy Phúc và các trưởng phòng dùng Claude Code hay cần giao diện web?~~ **Đã chốt (v0.2):** web chat là cửa vào chính cho mọi vai trò; Claude Code là cửa phụ (HLD ADR-014). | Lăng Tuấn Anh | EIR-09 |
+| OI-03 | ~~Thầy Phúc và các trưởng phòng dùng Claude Code hay cần giao diện web?~~ **Đã chốt (v0.2):** web chat là cửa vào chính cho mọi vai trò; Claude Code là cửa phụ (HLD ADR-015). | Lăng Tuấn Anh | EIR-09 |
 | OI-04 | Gói Claude cho nhân viên: Team, API key công ty, hay Pro cá nhân (chỉ phù hợp pilot)? | Ban lãnh đạo | DC-06, chi phí |
 | OI-05 | Nguồn đăng nhập chính thức ở P2 (Keycloak tự host, Google, Microsoft)? | Lăng Tuấn Anh | FR-AUTH-05 |
 | OI-06 | Tài liệu nằm ở đâu (git, Drive, Notion, thư mục)? Chưa có. | Lăng Tuấn Anh | FR-RAG-04 |
@@ -505,7 +505,7 @@ flowchart TB
 | OI-08 | Xác nhận pháp lý về xử lý dữ liệu cá nhân của nhân viên. | Pháp chế | NFR-PRV-03 |
 | OI-09 | Hook Claude Code: tên hook, tham số hiện hành cần kiểm tra trước khi làm. | Lăng Tuấn Anh | FR-ACT-03 |
 | OI-10 | Đặc tả MCP còn thay đổi; cần theo dõi bản phát hành. | Lăng Tuấn Anh | GA-05 |
-| OI-11 | Cách đăng nhập web ở P1 khi chưa có IdP: mật khẩu băm (argon2id) do quản trị cấp, hay liên kết đăng nhập một lần gửi qua email (phụ thuộc OI-01)? | Lăng Tuấn Anh | FR-AUTH-06 |
+| OI-12 | Cách đăng nhập web ở P1 khi chưa có IdP: mật khẩu băm (argon2id) do quản trị cấp, hay liên kết đăng nhập một lần gửi qua email (phụ thuộc OI-01)? | Lăng Tuấn Anh | FR-AUTH-06 |
 
 | Rủi ro | Mức | Giảm thiểu |
 |---|---|---|

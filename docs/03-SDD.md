@@ -591,4 +591,4 @@ run_job(job, scheduled_for):
 | SDD-OI-03 | Lược đồ `config` của từng loại project (phần mềm, vận hành, đào tạo...) | FR-ORG-04 |
 | SDD-OI-04 | Ngưỡng confidence và số lần hỏi lại tối ưu cho `parse_reply`, cần đo bằng dữ liệu thật | FR-CHK-05 |
 | SDD-OI-05 | Chọn công cụ lịch gửi tin cụ thể sau khi chốt kênh nhắn tin | OI-01 |
-| SDD-OI-06 | Framework cho web chat (giao diện và streaming) và cách đăng nhập P1 | EIR-09, OI-11 |
+| SDD-OI-06 | Framework cho web chat (giao diện và streaming) và cách đăng nhập P1 | EIR-09, OI-12 |

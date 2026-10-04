@@ -21,7 +21,7 @@ HLD mô tả kiến trúc tổng thể đáp ứng SRS: thành phần, ranh gi�
 |---|---|---|
 | Phân quyền theo từng người, ở server | NFR-SEC-02, FR-AUTH-02 | Danh tính đi cùng mọi lời gọi; tự xây MCP server |
 | Hỏi riêng từng người, chủ động | FR-NTF-02..05 | Cần Agent Service và Scheduler riêng |
-| Mọi nhân viên dùng được, kể cả người không rành kỹ thuật | NFR-USE-01, EIR-09 | Web chat là cửa vào chính; Claude Code + MCP là cửa phụ (ADR-014) |
+| Mọi nhân viên dùng được, kể cả người không rành kỹ thuật | NFR-USE-01, EIR-09 | Web chat là cửa vào chính; Claude Code + MCP là cửa phụ (ADR-015) |
 | Hai cửa vào không được lệch hành vi | FR-AUTH-07 | Một registry tool trong `pdca_core`, mỗi cửa vào chỉ là lớp vỏ mỏng |
 | Dữ liệu PDCA có cấu trúc | FR-PLAN, FR-TASK, FR-CHK | PostgreSQL; RAG chỉ cho văn bản |
 | Nhân bản nguyên tắc bằng kế thừa | FR-RULE-01..06 | Rule ba lớp trong git, ghép lúc chạy |
@@ -166,7 +166,7 @@ flowchart LR
 
 ### 6.1 Chốt ngày (UC-04)
 
-Cửa vào chính là web chat: trợ lý chạy ở máy chủ, gọi cùng các tool, lưu nháp, nhân viên bấm Duyệt. Sơ đồ dưới là luồng thay thế qua Claude Code (cửa phụ); bước xác nhận cuối giống nhau ở cả hai cửa (ADR-014).
+Cửa vào chính là web chat: trợ lý chạy ở máy chủ, gọi cùng các tool, lưu nháp, nhân viên bấm Duyệt. Sơ đồ dưới là luồng thay thế qua Claude Code (cửa phụ); bước xác nhận cuối giống nhau ở cả hai cửa (ADR-015).
 
 ```mermaid
 sequenceDiagram
@@ -408,7 +408,7 @@ Tùy chọn thay thế (Java/Spring AI MCP) chưa được kiểm tra mức hoà
 | ADR-011 | Agent Service dùng chung lớp nghiệp vụ với MCP, không gọi qua MCP vòng ngoài | Một bộ kiểm tra quyền, bớt hop mạng | Hai cửa vào phải cùng giữ hợp đồng |
 | ADR-012 | Không dùng đường truy cập model vi phạm điều khoản (ví dụ proxy dùng OAuth của IDE) | Rủi ro khóa tài khoản và lộ dữ liệu | Bị giới hạn ở nhà cung cấp chính thức |
 | ADR-013 | Pilot trên gói cá nhân chỉ với dữ liệu ít nhạy cảm; trước khi dùng dữ liệu thật chuyển sang API/Team | Điều khoản dữ liệu của gói cá nhân | Chi phí tăng khi chạy thật |
-| ADR-014 | (v0.2) Hai cửa vào song song, một registry tool: web chat là cửa chính, Claude Code + MCP là cửa phụ. Tool khai báo một lần trong `pdca_core`; tool mà model gọi được chỉ tạo bản nháp báo cáo, chuyển sang `submitted` là thao tác của người trên web | Phần lớn nhân viên không dùng Claude Code; web cho máy chủ kiểm soát prompt, rule, chi phí và nút xác nhận; người kỹ thuật vẫn làm việc trong Claude Code | Thêm một cửa vào phải bảo trì; ở Claude Code, prompt và rule nằm ở máy khách nên không kiểm soát được, chi phí mô hình theo gói của từng người; chốt ngày từ Claude Code cần thêm một lần bấm trên web |
+| ADR-015 | (v0.2) Hai cửa vào song song, một registry tool: web chat là cửa chính, Claude Code + MCP là cửa phụ. Tool khai báo một lần trong `pdca_core`; tool mà model gọi được chỉ tạo bản nháp báo cáo, chuyển sang `submitted` là thao tác của người trên web | Phần lớn nhân viên không dùng Claude Code; web cho máy chủ kiểm soát prompt, rule, chi phí và nút xác nhận; người kỹ thuật vẫn làm việc trong Claude Code | Thêm một cửa vào phải bảo trì; ở Claude Code, prompt và rule nằm ở máy khách nên không kiểm soát được, chi phí mô hình theo gói của từng người; chốt ngày từ Claude Code cần thêm một lần bấm trên web |
 
 ## 13. Lộ trình triển khai theo pha
 
@@ -430,7 +430,7 @@ Tùy chọn thay thế (Java/Spring AI MCP) chưa được kiểm tra mức hoà
 | RK-05 | Kênh nhắn tin bị giới hạn (ví dụ Zalo OA) | Adapter, bắt đầu bằng email hoặc kênh có API chủ động tốt |
 | RK-06 | Rò rỉ dữ liệu qua LLM | Gửi tối thiểu, điều khoản thương mại, phân loại dữ liệu |
 | RK-07 | Prompt injection | Tool chỉ trả dữ liệu, xác nhận ghi, nhãn dữ liệu không tin cậy |
-| RK-08 | Hai cửa vào lệch hành vi hoặc lệch quyền | Một registry tool (ADR-014); bộ ma trận quyền chạy trên cả token và phiên đăng nhập |
+| RK-08 | Hai cửa vào lệch hành vi hoặc lệch quyền | Một registry tool (ADR-015); bộ ma trận quyền chạy trên cả token và phiên đăng nhập |
 | RK-09 | Lỗi bảo mật ở phần web mới (phiên, CSRF, giả lập người dùng) | FR-AUTH-06, FR-AUTH-08; kiểm thử quyền riêng cho web; review chéo mọi thay đổi chạm phiên đăng nhập |
 
 ## 15. Truy vết yêu cầu → thành phần
