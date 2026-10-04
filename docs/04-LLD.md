@@ -434,7 +434,7 @@ Với `question.*`, bước (2) là: `ask` — người nhận = kết quả `re
 3. Từ chối quyền trả lỗi chung `forbidden_or_not_found`, không phân biệt "không có" với "không được xem".
 4. Mọi tool ghi audit trước khi trả kết quả (kể cả khi bị từ chối).
 5. (v0.2) Mọi tool khai báo một lần trong registry (`pdca_core.tools`); web chat và MCP chỉ đọc registry để phơi tool, không tự định nghĩa tool riêng (FR-AUTH-07).
-6. (v0.2) Thao tác có tác động mà người phải quyết (xác nhận báo cáo, duyệt đề xuất) **không** phải tool mà model gọi được; chúng là API web xác thực bằng phiên. *Hiện trạng/ngoại lệ chuyển tiếp:* `submit_report` đang ghi thẳng `submitted` và `answer_question send` (hỏi cấp trên) là tool model gọi được; cả hai giữ nguyên cho tới bước 12, sau đó `submit_report` chỉ tạo bản nháp, còn `answer_question send` cần quyết định riêng (xem mục 12, bước 12).
+6. (v0.2) Thao tác có tác động mà người phải quyết (xác nhận báo cáo, duyệt đề xuất) **không** phải tool mà model gọi được; chúng là API web xác thực bằng phiên. *Hiện trạng:* `submit_report` đang ghi thẳng `submitted`; bước 12 đổi thành chỉ tạo nháp. *Ngoại lệ có chủ đích:* `answer_question send` được giữ **hai đường** (tool MCP/web chat và API web), xem 4.2.
 
 ### 3.4 Registry tool (v0.2, **chưa cài đặt**)
 
@@ -558,7 +558,8 @@ Tool định nghĩa trong registry (mục 3.4). Cửa MCP: `MCPServer("pdca")`, 
   - Đầu ra: `{question_id, recipient_name, status, due_at}`. Quyền: `question.ask`.
 - `get_my_questions`: `side: "asker"|"recipient"`, `status?`, `limit?`, `cursor?`. Đầu ra: danh sách `{id, asker_name, recipient_name, body, project_id, task_id, status, created_at, due_at, answer?: {body, sent_at}, decline_reason?}`, mới nhất trước. Bản nháp `draft_by_agent` (P2) chỉ nằm trong trường `draft` của kết quả `side="recipient"`, không bao giờ ở `side="asker"`. Quyền: `question.read.own`.
 - `answer_question`: `question_id`, `action: "send"|"decline"`, `body` (bắt buộc khi `send`, ≤ 2000), `reason` (bắt buộc khi `decline`, ≤ 2000).
-  - Chỉ gọi sau khi người dùng đã xem và xác nhận nội dung (như `submit_report`, bất biến 6); skill phải hỏi xác nhận trước khi gọi.
+  - Chỉ gọi sau khi người dùng đã xem và xác nhận nội dung; skill phải hỏi xác nhận trước khi gọi.
+  - **Hai đường, một hàm (quyết định v0.2):** `send`/`decline` có thể đi qua tool `answer_question` (Claude Code, web chat) *hoặc* API web `POST /api/questions/{id}/answer` (nút Gửi, phiên đăng nhập). Cả hai gọi cùng `questions.service`, cùng `can`, cùng khóa dòng: lần gửi thứ hai trả `conflict`, đúng một bản `sent`, đúng một `answer_notice`. Audit phân biệt bằng `actor_kind` (`user_mcp`/`user_web`). Khác `submit_report`, đường tool không bị bỏ vì người nhận là người duyệt nội dung của chính mình và bản nháp agent (P2) chỉ chuyển `sent` qua hành động của người nhận trên một trong hai đường; không có đường tự gửi.
   - Khóa dòng `for update`; câu hỏi không còn `open` → `conflict`. `send`: ghi `question_answers(status='sent')`, câu hỏi → `answered`; `decline`: câu hỏi → `declined`, ghi `decline_reason`. Cả hai xếp `answer_notice` (`dedupe_key = answer_notice:{question_id}`) trong cùng giao dịch.
   - Quyền: `question.answer` (người nhận, câu hỏi `open`).
 - `cancel_question`: `question_id`; chỉ người hỏi, chỉ khi `open` (nếu không `conflict`) → `cancelled`. Quyền: `question.ask` với `asker_id = người gọi`.

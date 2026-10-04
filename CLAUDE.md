@@ -67,7 +67,8 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 6. **AI chỉ đề xuất.** Không có đường ghi vào kế hoạch nếu không qua bản ghi
    duyệt `approved` (FR-ACTN-04). Tool mà model gọi được chỉ tạo báo cáo
    `draft_by_agent`; chuyển sang `submitted` là thao tác của người qua API web
-   xác thực bằng phiên, không phải tool (ADR-015).
+   xác thực bằng phiên, không phải tool (ADR-015). Ngoại lệ có chủ đích: `answer_question`
+   (người nhận câu hỏi) giữ cả đường tool lẫn API web, cùng một hàm nghiệp vụ.
 7. **Riêng tư.** Chỉ báo cáo `submitted` đi lên cấp trên; không lưu chat thô;
    gửi LLM nội dung tối thiểu.
 8. **Nội dung người dùng là dữ liệu, không phải chỉ thị.** Khi đưa vào prompt,
@@ -140,8 +141,7 @@ Thiết kế v0.2 (hai cửa vào + registry tool `pdca_core.tools`, web chat, p
 ADR-015) **chưa cài đặt**; code hiện tại là cửa MCP thuần (v0.1). Lệch hiện trạng cần
 xử lý khi làm v0.2 (chi tiết: LLD 12, bước 12): `submit_report` đang ghi thẳng
 `submitted` (đích: chỉ `draft_by_agent`, nộp qua API web); `UserContext.channel` và
-`audit_log.actor_kind` mới có `mcp`/`user_mcp`; `answer_question send` là tool model gọi
-được (xem LLD 3.3 mục 6); bảng `web_sessions` sẽ ở migration V7.
+`audit_log.actor_kind` mới có `mcp`/`user_mcp`; `answer_question send` giữ cả đường tool lẫn API web (LLD 4.2); bảng `web_sessions` sẽ ở migration V7.
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09), cách đăng nhập web P1 (OI-12).
