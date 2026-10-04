@@ -4,8 +4,8 @@
 | Mục | Giá trị |
 |---|---|
 | Mã tài liệu | AIA-LLD-001 |
-| Phiên bản | 0.1 (bản nháp) |
-| Ngày | 2026-10-01 |
+| Phiên bản | 0.2 (bản nháp, đang soạn) |
+| Ngày | 2026-10-02 |
 | Căn cứ | AIA-SRS-001, AIA-HLD-001, AIA-SDD-001 |
 | Phạm vi chi tiết | P1 (MVP); P2/P3 ở mức phác thảo, đánh dấu rõ |
 | Tác giả | Lăng Tuấn Anh |
@@ -323,12 +323,35 @@ alter table outbound_messages add constraint outbound_messages_kind_check
                   'question_notice','answer_notice'));
 ```
 
+### 2.2a Migration V7 — phiên đăng nhập web (v0.2, **chưa cài đặt**)
+
+V1 đã chạy nên không sửa; v0.2 thêm file Flyway mới. Ngoài bảng `web_sessions` còn phải mở rộng hai ràng buộc `CHECK` đã tạo ở V1/V4 (đổi tên ràng buộc theo `\d` thực tế khi viết migration):
+
+```sql
+-- Phiên đăng nhập web (FR-AUTH-06, v0.2). Cột thông tin đăng nhập (mật khẩu hoặc liên kết email) chờ OI-12.
+create table web_sessions (
+  id           bigint generated always as identity primary key,
+  user_id      bigint not null references users(id),
+  session_hash bytea not null unique,        -- SHA-256 của mã phiên trong cookie
+  expires_at   timestamptz not null,
+  revoked_at   timestamptz,
+  last_seen_at timestamptz,
+  user_agent   text,
+  created_at   timestamptz not null default now()
+);
+create index web_sessions_user_idx on web_sessions(user_id);
+
+-- Mở rộng liệt kê cho cửa web (v0.2)
+-- audit_log.actor_kind: thêm 'user_web'
+-- reports.source:       thêm 'web_chat' (giữ 'system' từ V4)
+```
+
 ### 2.3 Vai trò cơ sở dữ liệu
 
 | Vai trò DB | Dùng bởi | Quyền |
 |---|---|---|
 | `flyway` | Flyway | DDL |
-| `pdca_app` | MCP Server, Agent Service, Scheduler | `select/insert/update` trên bảng nghiệp vụ; chỉ `insert` và `select` trên `audit_log`; không có `delete` trên `audit_log` |
+| `pdca_app` | Web chat, MCP Server, Agent Service, Scheduler | `select/insert/update` trên bảng nghiệp vụ; chỉ `insert` và `select` trên `audit_log`; không có `delete` trên `audit_log` |
 | `pdca_readonly` | Dashboard (P2), báo cáo | `select` |
 
 Cài đặt: login + mật khẩu tạo ngoài migration (`deploy/initdb/01-roles.sh`); quyền cấp ở `V2__role_grants.sql`, kèm `alter default privileges for role flyway` để bảng của migration sau tự có quyền như trên. Bảng chỉ thêm mới (như `audit_log`) phải `revoke update` tường minh trong migration tạo ra nó. `pdca_app` không có quyền trên `flyway_schema_history`.
@@ -343,7 +366,7 @@ Cài đặt: login + mật khẩu tạo ngoài migration (`deploy/initdb/01-role
 
 ## 3. Xác thực và phân quyền
 
-### 3.1 Token
+### 3.1 Token (cửa vào MCP)
 - Định dạng: chuỗi ngẫu nhiên 32 byte, mã hóa base64url, tiền tố `pdca_` để dễ nhận biết khi lộ.
 - Chỉ lưu SHA-256 (`token_hash`); hiển thị token đúng một lần lúc cấp.
 - Hạn mặc định 90 ngày; xoay vòng bằng cấp token mới rồi thu hồi cũ.
@@ -359,6 +382,7 @@ class UserContext:
     role: str                    # staff | dept_head | director | admin
     department_id: int | None
     project_ids: frozenset[int]
+    channel: str                 # web | mcp | agent: ghi vào audit, không dùng để nới quyền
     request_id: str
 
 def authenticate(token: str, repo, request_id: str) -> UserContext:
@@ -369,9 +393,16 @@ def authenticate(token: str, repo, request_id: str) -> UserContext:
     return UserContext(
         user_id=row.user_id, role=row.role, department_id=row.department_id,
         project_ids=frozenset(repo.project_ids(row.user_id)),
-        request_id=request_id,
+        channel="mcp", request_id=request_id,
     )
 ```
+
+### 3.1a Phiên đăng nhập (cửa vào web chat, v0.2)
+- Sau khi đăng nhập (cách đăng nhập theo OI-12), server sinh mã phiên ngẫu nhiên 32 byte, đặt vào cookie `HttpOnly`, `Secure`, `SameSite=Lax`, chỉ lưu SHA-256 vào `web_sessions`.
+- Hạn phiên theo `WEB_SESSION_TTL_HOURS`; đăng xuất hoặc khóa tài khoản thì đặt `revoked_at`.
+- Mọi API có tác động (xác nhận báo cáo, duyệt, đổi trạng thái) chống CSRF bằng `SameSite` cộng kiểm tra header `Origin`.
+- `authenticate_session(cookie, repo, request_id)` trả cùng `UserContext` như 3.1, với `channel="web"`. Từ đây mọi bước giống nhau.
+- Giả lập người dùng (FR-AUTH-08): chỉ chạy khi `PDCA_ENV=dev`; ở môi trường khác server từ chối, kể cả khi có cờ cấu hình.
 
 ### 3.2 Ma trận quyền (hành động → vai trò)
 
@@ -402,10 +433,38 @@ Với `question.*`, bước (2) là: `ask` — người nhận = kết quả `re
 2. Tool chỉ nhận `UserContext` từ lớp xác thực.
 3. Từ chối quyền trả lỗi chung `forbidden_or_not_found`, không phân biệt "không có" với "không được xem".
 4. Mọi tool ghi audit trước khi trả kết quả (kể cả khi bị từ chối).
+5. (v0.2) Mọi tool khai báo một lần trong registry (`pdca_core.tools`); web chat và MCP chỉ đọc registry để phơi tool, không tự định nghĩa tool riêng (FR-AUTH-07).
+6. (v0.2) Thao tác có tác động mà người phải quyết (xác nhận báo cáo, duyệt đề xuất) **không** phải tool mà model gọi được; chúng là API web xác thực bằng phiên. *Hiện trạng:* `submit_report` đang ghi thẳng `submitted`; bước 12 đổi thành chỉ tạo nháp. *Ngoại lệ có chủ đích:* `answer_question send` được giữ **hai đường** (tool MCP/web chat và API web), xem 4.2.
+
+### 3.4 Registry tool (v0.2, **chưa cài đặt**)
+
+> Hiện trạng (develop): tool được định nghĩa trực tiếp trong `adapters/mcp/server.py` và chạy qua `pdca_core.tool_runner.run_tool` (đồng bộ, tự xác thực); chưa có `pdca_core/tools/`. Đưa định nghĩa về registry là việc của bước 12 (mục 12).
+
+```python
+# pdca_core/tools/registry.py  (thiết kế tham khảo)
+@dataclass(frozen=True)
+class ToolSpec:
+    name: str                         # tên duy nhất, dùng chung cho web và MCP
+    input_model: type[BaseModel]
+    output_model: type[BaseModel]
+    action: str                       # hành động trong bảng 3.2, đưa vào can()
+    channels: frozenset[str]          # {"web", "mcp"}: cửa vào được phơi tool này
+    handler: Callable[[UserContext, BaseModel], BaseModel]
+```
+
+`run_tool(ctx, name, args)` tra registry, kiểm `ctx.channel in spec.channels`, kiểm lược đồ, gọi `handler`, giới hạn đầu ra, ghi audit. Tool không phơi cho cửa vào đó trả `forbidden_or_not_found`.
+
+Phơi tool theo cửa vào ở P1:
+
+| Nhóm tool | Web chat | MCP (Claude Code) |
+|---|---|---|
+| `whoami`, `get_my_tasks`, `update_task_status`, `log_activity` | ✓ | ✓ |
+| `get_my_day_context`, `submit_report` (chỉ tạo bản nháp), `get_my_reports` | ✓ | ✓ |
+| Kế hoạch, giao việc, xem nhóm (`get_project_status`, `get_team_blockers`...) | ✓ | Mở sau khi web ổn định |
 
 ## 4. Đặc tả MCP tool (P1)
 
-Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app(stateless_http=True, json_response=True)`, endpoint mặc định `/mcp`. Mọi tool nhận người gọi từ `UserContext`.
+Tool định nghĩa trong registry (mục 3.4). Cửa MCP: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app(stateless_http=True, json_response=True)`, endpoint mặc định `/mcp`, đăng ký tool từ registry. Cửa web chat: vòng hội thoại phía server đưa cùng danh sách tool vào `LLMClient` dưới dạng tool calling. Mọi tool nhận người gọi từ `UserContext`.
 
 ### 4.1 Quy ước chung
 
@@ -450,11 +509,12 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
 - Hành vi:
   - Với `create`: nếu đã có báo cáo (user, project, ngày) → trả `conflict` kèm gợi ý dùng `append` hoặc `replace`.
   - `append`: nối vào `done`, thêm `blocker_items`.
-  - `replace`: thay nội dung, giữ trạng thái `submitted`.
-  - Trạng thái kết quả `submitted`, `source = claude_code`.
-- Đầu ra: `{report_id, status}`.
+  - `replace`: thay nội dung bản nháp.
+  - (v0.2) Trạng thái kết quả luôn là `draft_by_agent`; `source` là `web_chat` hoặc `claude_code` theo `ctx.channel`. Nếu báo cáo đã `submitted` → `conflict`, gợi ý bổ sung trên web.
+  - Chuyển sang `submitted` chỉ qua API web `POST /api/reports/{id}/confirm` (xác thực bằng phiên, hành động `report.submit.own`), không phải tool.
+- Đầu ra: `{report_id, status, confirm_url}`.
 - Quyền: thành viên project.
-- Lưu ý thiết kế: tool này được gọi **sau khi** người dùng xác nhận bản nháp trong Claude Code; hướng dẫn trong lệnh/plugin bắt buộc bước xác nhận (FR-CHK-02, NFR-SEC-06).
+- Lưu ý thiết kế: tool vẫn chỉ được gọi sau khi người dùng đồng ý nội dung nháp trong cuộc trò chuyện, nhưng bảo đảm cuối cùng là bước xác nhận trên web, không phụ thuộc model (FR-CHK-02, NFR-SEC-06, HLD ADR-015).
 
 #### `get_my_reports`
 - Đầu vào: `from_date`, `to_date`, `project_id?`.
@@ -498,7 +558,8 @@ Server: `MCPServer("pdca")`, ứng dụng ASGI tạo bằng `streamable_http_app
   - Đầu ra: `{question_id, recipient_name, status, due_at}`. Quyền: `question.ask`.
 - `get_my_questions`: `side: "asker"|"recipient"`, `status?`, `limit?`, `cursor?`. Đầu ra: danh sách `{id, asker_name, recipient_name, body, project_id, task_id, status, created_at, due_at, answer?: {body, sent_at}, decline_reason?}`, mới nhất trước. Bản nháp `draft_by_agent` (P2) chỉ nằm trong trường `draft` của kết quả `side="recipient"`, không bao giờ ở `side="asker"`. Quyền: `question.read.own`.
 - `answer_question`: `question_id`, `action: "send"|"decline"`, `body` (bắt buộc khi `send`, ≤ 2000), `reason` (bắt buộc khi `decline`, ≤ 2000).
-  - Chỉ gọi sau khi người dùng đã xem và xác nhận nội dung (như `submit_report`, bất biến 6); skill phải hỏi xác nhận trước khi gọi.
+  - Chỉ gọi sau khi người dùng đã xem và xác nhận nội dung; skill phải hỏi xác nhận trước khi gọi.
+  - **Hai đường, một hàm (quyết định v0.2):** `send`/`decline` có thể đi qua tool `answer_question` (Claude Code, web chat) *hoặc* API web `POST /api/questions/{id}/answer` (nút Gửi, phiên đăng nhập). Cả hai gọi cùng `questions.service`, cùng `can`, cùng khóa dòng: lần gửi thứ hai trả `conflict`, đúng một bản `sent`, đúng một `answer_notice`. Audit phân biệt bằng `actor_kind` (`user_mcp`/`user_web`). Khác `submit_report`, đường tool không bị bỏ vì người nhận là người duyệt nội dung của chính mình và bản nháp agent (P2) chỉ chuyển `sent` qua hành động của người nhận trên một trong hai đường; không có đường tự gửi.
   - Khóa dòng `for update`; câu hỏi không còn `open` → `conflict`. `send`: ghi `question_answers(status='sent')`, câu hỏi → `answered`; `decline`: câu hỏi → `declined`, ghi `decline_reason`. Cả hai xếp `answer_notice` (`dedupe_key = answer_notice:{question_id}`) trong cùng giao dịch.
   - Quyền: `question.answer` (người nhận, câu hỏi `open`).
 - `cancel_question`: `question_id`; chỉ người hỏi, chỉ khi `open` (nếu không `conflict`) → `cancelled`. Quyền: `question.ask` với `asker_id = người gọi`.
@@ -763,7 +824,7 @@ rules/
 ```
 Mỗi mục rule có khóa và cờ `mandatory: true|false` ở phần đầu tệp (YAML front matter). Quy tắc ghép ở SDD 4.11.2.
 
-## 7. Plugin cho Claude Code (P1)
+## 7. Plugin cho Claude Code (P1, cửa vào phụ)
 
 ### 7.1 Nội dung
 ```text
@@ -795,7 +856,7 @@ Cú pháp, thư mục và tên tệp chính xác của plugin, lệnh và cấu 
 
 ### 7.3 Nội dung lệnh `chot-ngay` (khung)
 ```text
-Mục tiêu: soạn bản nháp báo cáo ngày, cho người dùng duyệt, rồi nộp.
+Mục tiêu: soạn bản nháp báo cáo ngày, cho người dùng duyệt, lưu nháp, rồi chỉ đường xác nhận trên web.
 
 Các bước:
 1. Gọi get_my_day_context để lấy task, hoạt động trong ngày.
@@ -803,8 +864,8 @@ Các bước:
 3. Soạn bản nháp theo mẫu: Đã làm / Vướng gì / Xung đột lịch.
 4. Hiển thị bản nháp cho người dùng và HỎI XÁC NHẬN. Không gọi submit_report khi chưa có xác nhận rõ ràng.
 5. Nếu người dùng sửa, cập nhật bản nháp và hỏi lại.
-6. Khi được xác nhận, gọi submit_report cho từng project có công việc.
-7. Báo lại kết quả.
+6. Khi được đồng ý, gọi submit_report cho từng project có công việc (lưu ở trạng thái nháp).
+7. Báo lại kết quả kèm confirm_url; nhắc người dùng bấm Duyệt trên web để nộp.
 
 Quy tắc:
 - Chỉ đưa vào báo cáo nội dung người dùng đồng ý, không đưa nội dung chat thô hay mã nguồn.
@@ -860,10 +921,12 @@ Dự kiến dùng hook của Claude Code khi kết thúc phiên để gợi ý g
 | `QUESTION_TTL_DAYS`, `QUESTION_MAX_OPEN`, `QUESTION_MAX_PER_DAY` | mcp, scheduler | Hạn trả lời (mặc định 3 ngày), số câu hỏi mở tối đa (5), số câu hỏi mỗi ngày (10) của mỗi người (FR-ASK-05, FR-ASK-07) |
 | `OUTBOX_MAX_ATTEMPTS`, `OUTBOX_INTERVAL_SECONDS` | scheduler | Số lần thử gửi (5), chu kỳ gửi (60 giây) |
 | `RATE_LIMIT_PER_MIN` | mcp | Giới hạn theo người dùng |
-| `OUTPUT_MAX_ROWS`, `OUTPUT_MAX_BYTES` | mcp | Giới hạn đầu ra |
+| `OUTPUT_MAX_ROWS`, `OUTPUT_MAX_BYTES` | mcp, web | Giới hạn đầu ra |
 | `MCP_HOST`, `MCP_PORT` | mcp | Địa chỉ lắng nghe (mặc định `127.0.0.1:8000`; container dùng `0.0.0.0`) |
 | `MCP_ALLOWED_HOSTS` | mcp | Danh sách `Host` hợp lệ, phân tách dấu phẩy, hỗ trợ `tên:*` — chống DNS rebinding của SDK; phải gồm tên miền Caddy chuyển tiếp |
 | `DB_POOL_MAX` | mcp | Kích thước tối đa pool kết nối (mặc định 10) |
+| `WEB_BASE_URL` | web, mcp | Địa chỉ web chat, dùng để dựng `confirm_url` và kiểm `Origin` |
+| `WEB_SESSION_TTL_HOURS` | web | Hạn phiên đăng nhập |
 
 ### 8.2 Cấu hình project (`projects.config`)
 
@@ -935,8 +998,8 @@ Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <t�
 |---|---|---|
 | Đơn vị | Hàm `can`, ghép rule, kiểm tra cây kế hoạch, máy trạng thái, tạo `dedupe_key` | pytest |
 | Tích hợp DB | Repository, ràng buộc duy nhất, khóa lạc quan, idempotent job | Testcontainers (Postgres) |
-| Hợp đồng MCP | Từng tool: đầu vào, đầu ra, mã lỗi | MCP Inspector + pytest |
-| **Ma trận quyền** | Mọi cặp (vai trò × tool × tài nguyên của người khác/project khác) phải bị từ chối đúng | pytest tham số hóa từ bảng 3.2 |
+| Hợp đồng tool | Từng tool trong registry: đầu vào, đầu ra, mã lỗi, phơi đúng cửa vào | pytest; MCP Inspector cho cửa MCP |
+| **Ma trận quyền** | Mọi cặp (vai trò × tool × tài nguyên của người khác/project khác) phải bị từ chối đúng, chạy trên **cả hai cửa vào** (token MCP và phiên web) | pytest tham số hóa từ bảng 3.2 |
 | Prompt injection | Nội dung báo cáo chứa chỉ thị ("bỏ qua hướng dẫn...") không làm thay đổi hành vi hay gọi tool ngoài ý | Bộ ca kiểm thử cố định |
 | Chất lượng phân tích | `parse_reply` trên bộ trả lời tiếng Việt mẫu (rõ, mơ hồ, lạc đề) | Bộ đánh giá + đo độ chính xác trường |
 | Chịu tải | 100 người dùng đồng thời cho tool đọc/ghi chính | k6 hoặc locust |
@@ -965,6 +1028,10 @@ Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <t�
 | T-17 | Trưởng phòng trực thuộc bị khóa (hoặc vị trí trống); nhân viên gọi `ask_superior`, rồi trưởng phòng được mở khóa và nhân viên hỏi thêm một câu | Câu đầu tới cấp kế tiếp (vượt cấp) và giữ nguyên người nhận; câu sau tới trưởng phòng | AC-09, FR-ASK-02 |
 | T-17b | Trưởng phòng trực thuộc có `away_until` ≥ hôm nay; nhân viên gọi `ask_superior` | Câu hỏi vẫn tới trưởng phòng (không vượt cấp) | FR-ASK-02 |
 | T-18 | Chuỗi `manager_id` đứt (không có `manager_id`, trỏ sai vai trò, giám đốc ở bước thứ 4) hoặc người gọi là giám đốc không có cấp trên — kể cả khi chỉ còn một giám đốc hoạt động | `invalid_argument`, không tạo câu hỏi | FR-ASK-02 |
+| T-19 | Cùng người dùng gọi cùng tool qua MCP và qua web chat | Cùng kết quả, cùng mã lỗi khi bị từ chối; audit ghi đúng `actor_kind` | FR-AUTH-07 |
+| T-20 | Gọi `submit_report` qua MCP rồi chạy tổng hợp phòng | Báo cáo ở `draft_by_agent`, không xuất hiện trong tổng hợp đến khi người dùng bấm Duyệt trên web | FR-CHK-02, AC-06 |
+| T-21 | Bật giả lập người dùng khi `PDCA_ENV=staging` | Server từ chối, ghi audit `denied` | FR-AUTH-08 |
+| T-22 | Gọi API xác nhận báo cáo với cookie hợp lệ nhưng `Origin` lạ | Từ chối, báo cáo không đổi | FR-AUTH-06 |
 
 ## 11. Xử lý lỗi và tình huống biên
 
@@ -986,15 +1053,16 @@ Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <t�
 |---|---|---|
 | 1 | Khởi tạo dự án, CI, Docker Compose cục bộ | Môi trường dev |
 | 2 | Flyway V1, vai trò DB, seed | Schema chạy được |
-| 3 | `authz` + token + `audit` + `run_tool` | Khung bảo mật |
-| 4 | Tool: `whoami`, `get_my_tasks`, `update_task_status`, `log_activity` | Đọc/ghi task |
-| 5 | Tool: `get_my_day_context`, `submit_report`, `get_my_reports` | Chu trình Check bằng tay |
-| 6 | Plugin rule + lệnh `chot-ngay`, nối với Claude Code | Chốt ngày hoạt động |
-| 7 | Tool kế hoạch và giao việc | Plan/Do |
+| 3 | `authz` + token + `audit` + `run_tool` (đã xong, cửa MCP). Phần phiên đăng nhập web và registry chuyển sang bước 12 | Khung bảo mật cửa MCP |
+| 4 | Tool: `whoami`, `get_my_tasks`, `update_task_status`, `log_activity` qua MCP (đã xong). Phơi qua web chat: bước 12 | Đọc/ghi task qua MCP |
+| 5 | Tool: `get_my_day_context`, `submit_report`, `get_my_reports` (đã xong; `submit_report` hiện ghi thẳng `submitted`). Chuyển thành nháp + API web xác nhận: bước 12 | Chu trình Check qua MCP |
+| 6 | Plugin rule + lệnh `chot-ngay`, nối với Claude Code (cửa phụ) | Chốt ngày từ Claude Code, xác nhận trên web |
+| 7 | Tool kế hoạch và giao việc (đã xong qua MCP; phơi qua web: bước 12) | Plan/Do |
 | 8 | Adapter kênh đầu tiên + `outbox` + job nhắc việc/hỏi tiến độ | Check chủ động |
-| 9 | Bộ kiểm thử ma trận quyền + prompt injection + chịu tải | Tiêu chí AC |
+| 9 | Bộ kiểm thử ma trận quyền trên cả hai cửa vào + prompt injection + chịu tải | Tiêu chí AC; phần hai cửa vào (T-19..T-22) làm cùng bước 12 |
 | 10 | Triển khai staging, pilot 2-3 người, sau đó 3-5 người | Số liệu thật |
 | 11 | Hỏi cấp trên (FR-ASK P1): V6, bốn tool, job `question_expire`, hai lệnh plugin, ca T-11..T-13 và T-16..T-18 vào bộ ma trận quyền; có thể làm trước bước 9 | UC-18 |
+| 12 | **Hai cửa vào (v0.2, ADR-015)**: V7 (`web_sessions`, mở rộng `actor_kind`/`source`); registry `pdca_core/tools` và chuyển 19 tool hiện có vào đó (MCP chỉ còn adapter mỏng); phiên đăng nhập web (chờ OI-12); vòng hội thoại web chat; `submit_report` chỉ tạo `draft_by_agent` + `POST /api/reports/{id}/confirm`; thêm cửa web vào bộ ma trận quyền; ca T-19..T-22; cập nhật lệnh `chot-ngay` (bước nhắc bấm Duyệt) | Web chat là cửa chính, Claude Code là cửa phụ |
 
 Sau pilot, đo: tỷ lệ báo cáo đúng mẫu, tỷ lệ phải sửa lại bản nháp, số tin/người/ngày, chi phí LLM thực tế; dùng số liệu này để chốt P2.
 
@@ -1003,8 +1071,8 @@ Sau pilot, đo: tỷ lệ báo cáo đúng mẫu, tỷ lệ phải sửa lại b
 | Mục LLD | Yêu cầu |
 |---|---|
 | 2 (DDL) | DR-01..06, FR-ORG, FR-PLAN, FR-TASK, FR-CHK, FR-AUD, FR-NTF-05, NFR-REL-03 |
-| 3 (xác thực, quyền) | FR-AUTH-01..04, NFR-SEC-02, FR-PLAN-06 |
-| 4 (tool) | EIR-01, FR-TASK, FR-ACT, FR-CHK, FR-PLAN, FR-AUD-01, NFR-SEC-05 |
+| 3 (xác thực, quyền, registry) | FR-AUTH-01..04, FR-AUTH-06..08, NFR-SEC-02, FR-PLAN-06 |
+| 4 (tool) | EIR-01, EIR-09, FR-TASK, FR-ACT, FR-CHK, FR-PLAN, FR-AUD-01, NFR-SEC-05 |
 | 5 (agent, job) | FR-NTF-01..06, FR-CHK-05..07, FR-AGT, FR-AGG, FR-ACTN, NFR-COST |
 | 6 (giao diện ngoài) | EIR-03..05, DC-04, DC-08 |
 | 7 (plugin) | FR-RULE-06, FR-CHK-02, NFR-USE-01 |
