@@ -12,31 +12,33 @@ MCP Server mở trên `127.0.0.1:${MCP_HTTP_PORT}` (mặc định 8010); TLS do 
 
 ## 0. Hiện trạng máy chủ đích
 
-Khảo sát ngày 2026-10-04. **Chưa triển khai PDCA lên máy chủ này.** Máy chủ đang chạy
-dự án khác (PPS English) nên PDCA phải tránh đụng cổng, thư mục và runner. Repo này công
-khai: không ghi tên tài khoản, hostname máy chủ hay đường dẫn cá nhân vào đây; bản kiểm kê
-chi tiết giữ ngoài repo.
+Kiểm tra ngày 2026-10-04. **Chưa triển khai PDCA lên máy chủ này.** Máy chủ đang chạy các dự
+án khác (PPS English, website công khai) nên PDCA phải tránh đụng cổng, thư mục, tài khoản và
+runner. Repo này công khai: không ghi tên tài khoản, hostname, địa chỉ IP, dải mạng, quy tắc
+tường lửa hay đường dẫn cá nhân vào đây; bản kiểm kê chi tiết giữ ngoài repo.
 
 | Hạng mục | Hiện trạng | Hệ quả cho PDCA |
 |---|---|---|
-| Cổng loopback đã bị dự án khác chiếm | 3100, 3101, 5432, 5433, 5434, 8080, 8081, 9000, 9002 | **Không dùng 5434 cho `DB_PORT`** (từng gợi ý ở bản cũ): dùng `5435`. MCP giữ `8010` (đang trống). Kiểm tra lại trước khi chạy: `sudo ss -ltn \| grep -E ':(5435\|8010)\b'` phải rỗng. |
-| Tên container/volume | Dự án khác dùng tiền tố `pps-` và `ppsvn-` | Compose đặt project `pdca` (container `pdca-*`, volume `pdca_pgdata`) nên không trùng. |
-| Mạng | nginx nghe cổng 80, mỗi dự án một site theo `server_name`; TLS do Cloudflare Tunnel (không có IP công khai) | Dùng mục 2A: thêm một site nginx và một hostname trên tunnel. Không dùng Caddy (mục 2B). Luôn `sudo nginx -t` trước khi reload vì nginx này đang phục vụ dự án khác. |
-| Tài nguyên | Dư dả cho PDCA (RAM khả dụng hàng chục GB, đĩa trống hàng chục GB) | Không cần tinh chỉnh. |
-| Runner CI | Đã có một runner của dự án khác; chưa có runner cho repo này | Runner khác không nhận job của repo này. Nếu bật CI/CD (mục 7) phải cài runner riêng, nhãn `pdca`, thư mục riêng. |
-| Thư mục triển khai | `/opt` đang chứa thư mục của dự án khác; `/opt/pdca-system` chưa tạo | Clone vào `/opt/pdca-system` (mục 2). |
+| Cổng loopback | Các cổng 5432–5434 đã bị dự án khác dùng; `5435`, `8010`, `8025` đang trống | **Không dùng 5434 cho `DB_PORT`**: dùng `5435`. MCP giữ `8010`. Kiểm tra lại trước khi chạy: `sudo ss -ltn \| grep -E ':(5435\|8010\|8025)'` phải rỗng (8025 là giao diện Mailpit, profile `mail`). |
+| Tên container/volume/mạng | Dự án khác dùng tiền tố `pps-` và `ppsvn-` | Compose đặt project `pdca` (container `pdca-*`, volume `pdca_pgdata`) nên không trùng. |
+| Mạng | nginx nghe cổng 80, mỗi dự án một site theo `server_name`; TLS do một Cloudflare Tunnel dùng chung (không có IP công khai); không mở 80/443 ra ngoài | Dùng mục 2A, không dùng Caddy (2B). Site `pdca` phải đặt đúng `server_name` (= `PDCA_DOMAIN`). Luôn `sudo nginx -t` trước khi reload vì nginx này đang phục vụ dự án khác. |
+| Tunnel | Cấu hình bằng tệp (không dùng dashboard); mục cuối của `ingress` là `http_status:404` | Chèn hostname PDCA ngay trước mục cuối (mục 2A). Restart `cloudflared` làm gián đoạn mọi hostname trên tunnel: làm ngoài giờ. |
+| Tài nguyên | Dư dả cho PDCA; ổ đĩa dùng chung với các dự án khác | Không cần tinh chỉnh; theo dõi dung lượng khi có dữ liệu thật. |
+| Runner CI | Đã có một runner của dự án khác; chưa có runner cho repo này | Runner khác không nhận job của repo này. Nếu bật CI/CD (mục 7) phải cài runner riêng, nhãn `pdca`, thư mục riêng, **tài khoản riêng**. |
+| Thư mục triển khai | `/opt/pdca-system` chưa tạo | Clone vào `/opt/pdca-system` (mục 2). |
+| Sao lưu | Backup tự động của máy chủ không bao gồm DB `pdca` | Làm backup cho PDCA (LLD 9.2) trước khi nạp dữ liệu thật. |
 
-**Chưa kiểm tra (làm trước khi triển khai):**
+**Chưa chốt (làm trước khi triển khai):**
 
-- Tunnel Cloudflare quản lý bằng dashboard hay tệp `config.yml` (quyết định cách thêm hostname ở mục 2A).
-- Hostname dành cho PDCA (ví dụ `pdca.<tên miền công ty>`) chưa chốt; `PDCA_DOMAIN` phải trùng tên này.
-- Tài khoản chạy runner có thuộc nhóm `docker` không.
+- Hostname dành cho PDCA (ví dụ `pdca.<tên miền công ty>`); `PDCA_DOMAIN` phải trùng tên này. Hostname nên cùng zone Cloudflare với các hostname đang có trên tunnel; khác zone thì phải đăng nhập lại `cloudflared`.
+- Cách vào PDCA ở P1: tunnel công khai (mục 2A) hay mạng riêng/VPN (SRS NFR-SEC-01).
 
 **Lưu ý bảo mật về runner (mục 7).** Runner chạy cùng máy với dự án khác và tài khoản chạy
-runner cần nhóm `docker`, tức gần như quyền root trên máy: workflow của repo này về lý thuyết
-tác động được tới container của dự án khác. Nếu bật CI/CD: giới hạn môi trường `production`
-cho nhánh `main`, đặt người duyệt bắt buộc (Required reviewers) và duyệt tay PR từ fork. Khi
-chưa cần tự động, triển khai tay (mục 5) là lựa chọn an toàn hơn cho giai đoạn pilot.
+runner cần nhóm `docker`, tức gần như quyền root trên máy. Không dùng tài khoản đang chạy
+runner của dự án khác: workflow của repo này sẽ đọc được thư mục và dữ liệu của dự án đó. Tạo
+tài khoản riêng chỉ sở hữu `/opt/pdca-system` và thư mục runner. Nếu bật CI/CD: giới hạn môi trường
+`production` cho nhánh `main`, đặt người duyệt bắt buộc (Required reviewers) và duyệt tay PR từ
+fork. Khi chưa cần tự động, triển khai tay (mục 5) là lựa chọn an toàn hơn cho giai đoạn pilot.
 
 ## 1. Chuẩn bị máy chủ
 
@@ -80,10 +82,21 @@ curl -s localhost:8010/mcp -H 'Content-Type: application/json' \
    sudo nginx -t && sudo systemctl reload nginx
    ```
 
-2. Cloudflare Tunnel: thêm *Public hostname* `pdca.congty.vn` → `http://localhost:80`
-   (Zero Trust → Networks → Tunnels → tunnel đang dùng → Public Hostname; hoặc thêm
-   một mục `ingress` cho hostname đó trong `config.yml` của `cloudflared` rồi restart).
-   Cloudflare tự tạo bản ghi DNS và cấp TLS.
+2. Cloudflare Tunnel: thêm một mục `ingress` cho hostname PDCA vào cấu hình của `cloudflared`.
+   Làm ngoài giờ vì restart làm gián đoạn mọi hostname đang chạy trên tunnel:
+
+   ```bash
+   sudo cp /etc/cloudflared/config.yml /etc/cloudflared/config.yml.bak
+   sudo nano /etc/cloudflared/config.yml
+   # Thêm TRƯỚC dòng cuối "- service: http_status:404":
+   #   - hostname: pdca.congty.vn
+   #     service: http://localhost:80
+   sudo cloudflared tunnel ingress validate
+   sudo systemctl restart cloudflared && sudo journalctl -u cloudflared -n 20 --no-pager
+   sudo cloudflared tunnel route dns <tên-tunnel> pdca.congty.vn   # tạo CNAME vào tunnel
+   ```
+
+   Chỉ thêm record cho hostname PDCA; không dùng `--overwrite-dns`. Cloudflare tự cấp TLS.
 
 ### 2B. Máy chủ riêng với Caddy
 
@@ -173,7 +186,7 @@ docker compose -f deploy/docker-compose.yml exec db psql -U postgres -d pdca -c 
 nhận job của repo này, nên cài thêm một runner riêng, trong thư mục riêng:
 
 1. GitHub → repo `pdca-system` → Settings → Actions → Runners → *New self-hosted runner* →
-   Linux; làm theo các lệnh hiện ra trong thư mục mới, ví dụ `~/actions-runner-pdca`.
+   Linux; làm theo các lệnh hiện ra, **bằng tài khoản riêng của PDCA** trong thư mục mới, ví dụ `~/actions-runner-pdca`.
 2. Khi `./config.sh` hỏi nhãn (*labels*), nhập `pdca`; tên runner tùy ý.
 3. Chạy như dịch vụ: `sudo ./svc.sh install <user> && sudo ./svc.sh start`. `<user>` cần
    thuộc nhóm `docker` và có quyền ghi vào `DEPLOY_PATH`.
@@ -205,4 +218,4 @@ Thư mục `DEPLOY_PATH` phải ở nhánh `main`, không có commit hay sửa �
 | Đổi mật khẩu trong `.env` không có tác dụng | Mật khẩu DB chỉ đặt khi khởi tạo volume (`deploy/initdb/`); đổi bằng `ALTER ROLE` hoặc xóa volume `pdca_pgdata` (mất dữ liệu). |
 
 Ghi chú bảo mật: PostgreSQL chỉ mở trên `127.0.0.1` của máy chủ; `deploy/.env`
-có quyền 600 và không commit. Sao lưu (LLD 9.2) chưa tự động hóa.
+có quyền 600 và không commit. Sao lưu (LLD 9.2) chưa tự động hóa và backup của máy chủ không bao gồm DB `pdca` (mục 0).
