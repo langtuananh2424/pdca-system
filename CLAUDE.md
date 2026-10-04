@@ -18,7 +18,7 @@ chung code, quy ước hay migration.
   toán `can`, ghép rule, idempotency job (4.11).
 - `docs/04-LLD.md` — **nguồn chính khi code**: DDL (mục 2), token + ma trận
   quyền chi tiết (mục 3), đặc tả từng MCP tool (mục 4), job/agent (5), plugin
-  (7), biến môi trường (8), ca kiểm thử T-01..T-10 (10), lộ trình P1 (12).
+  (7), biến môi trường (8), ca kiểm thử T-01..T-18 (10), lộ trình P1 (12).
 
 Khi implement một tool/job: đọc đúng mục LLD tương ứng, dùng đúng tên bảng,
 cột, trạng thái, mã lỗi đã thiết kế — không tự đặt lại. Nếu cần lệch thiết
@@ -37,12 +37,13 @@ Docker Compose + Caddy.
 ## Cấu trúc
 ```
 db/migration/   Flyway V{n}__{mô_tả}.sql — nguồn DDL duy nhất
-src/pdca_core/  lớp nghiệp vụ: authz org plans tasks reports actions aggregation audit tools repositories
+db/seed/        dữ liệu dev (R__, idempotent) — không nạp ở staging/prod
+src/pdca_core/  lớp nghiệp vụ: authz org plans tasks reports outreach questions actions aggregation audit repositories (+ `tools`, đích v0.2, chưa có)
 src/adapters/   mcp llm channels rules docs
 src/apps/       web_chat mcp_server agent_service scheduler admin_cli dashboard
 src/config/
 rules/          rule công ty/phòng ban (Markdown + YAML front matter)
-plugin/         plugin Claude Code: rule, lệnh chot-ngay, .mcp.json
+plugin/         plugin Claude Code: skill chot-ngay, hook rule, .mcp.json (rules/ trong đó là tệp sinh)
 tests/          unit integration permission_matrix
 deploy/         docker-compose, Dockerfile, Caddyfile
 ```
@@ -86,8 +87,8 @@ deploy/         docker-compose, Dockerfile, Caddyfile
   `conflict`, `rate_limited`, `internal`.
 - Tên biến, log, mã lỗi bằng tiếng Anh; docstring/comment nghiệp vụ bằng
   tiếng Việt, dùng đúng thuật ngữ và mã yêu cầu (FR-xx, NFR-xx) để truy vết.
-- Không commit token, `.env`, khóa API. `PDCA_TOKEN` chỉ nằm ở biến môi
-  trường máy người dùng.
+- Không commit token, `.env`, khóa API. Token người dùng nhập qua
+  `userConfig.api_token` (sensitive) của plugin, lưu trong kho bí mật của máy.
 
 ## Kiểm thử
 - Logic mới trong `pdca_core` có unit test; repository/ràng buộc DB có test
@@ -99,10 +100,48 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 - Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
 
 ## Trạng thái hiện tại
-Tài liệu thiết kế v0.2 đang soạn (đã có: hai cửa vào + registry tool, ADR-015),
-khung thư mục, `pyproject.toml` + `uv.lock`. Bước
-còn lại của LLD mục 12 bước 1: CI (GitHub Actions), Docker Compose
-cục bộ.
+Xong LLD mục 12 bước 1–7: khung dự án, CI, Docker Compose cục bộ (`deploy/`;
+dịch vụ ứng dụng nằm trong profile `apps` cho tới khi có entrypoint);
+`V1__core.sql`, `V2__role_grants.sql`, seed dev; khung bảo mật trong
+`pdca_core`: `errors`, `authz` (context, policy/`can`, tokens), `audit`,
+`tool_runner.run_tool`, `output_limits`, `ratelimit`, repository Postgres;
+`pdca-admin token issue|revoke`. Login + mật khẩu vai trò DB tạo ở
+`deploy/initdb/`, không trong migration. `run_tool` tự xác thực để token
+sai cũng được audit (xem LLD 4.3). MCP Server (`adapters/mcp/server.py`,
+`python -m apps.mcp_server`) có tool `whoami`, `get_my_tasks`,
+`update_task_status`, `log_activity`, `get_my_day_context`, `submit_report`,
+`get_my_reports` (quy tắc create/append/replace: LLD 4.2 ghi chú bước 5),
+`list_plans`, `get_plan`, `create_plan`, `update_plan`, `create_task`,
+`assign_task` (phạm vi kế hoạch: LLD 4.2 ghi chú bước 7), `get_project_status`,
+`get_team_blockers` (chỉ báo cáo `submitted`); đọc token qua `Context.headers` của SDK
+`mcp` 2.2, không dùng `token_verifier`. Ma trận quyền mức tool ở
+`tests/permission_matrix/test_tools_matrix.py`; fixture DB dùng chung ở
+`tests/db_fixtures.py`, gọi MCP qua HTTP ở `tests/mcp_helpers.py`. Plugin
+Claude Code ở `plugin/` (marketplace `.claude-plugin/marketplace.json`): skill
+`/pdca:chot-ngay`, `/pdca:viec-cua-toi`, hook SessionStart nạp rule ghép sẵn —
+sửa `rules/` rồi chạy `uv run pdca-admin rules build` (LLD 7.5). Đủ tool P1
+của LLD 4.2. Bước tiếp theo theo LLD 12: bước 8 — adapter kênh + outbox + job
+nhắc việc: đã xong phần không phụ thuộc kênh (LLD 5.8 — `pdca_core/outreach`,
+`job_runner.run_job`, `apps/scheduler` chạy trong Compose với kênh `log`, V4
+`reports.source = 'system'`) và gửi email qua SMTP (LLD 5.9, V5 giãn cách thử
+lại, Mailpit cho dev: Compose profile `mail`). Triển khai lên máy chủ + nối
+Claude Code: `deploy/README.md` (`deploy/init-env.sh`). Nhánh: phát triển trên
+`develop`, `main` là release; push lên `main` chạy CI rồi job `deploy` chạy trên self-hosted runner tại
+máy chủ (`deploy/README.md` mục 7). Còn lại: nhận + phân tích trả
+lời (Agent Service, cần chốt LLM — OI-04).
+
+Đã cài đặt hỏi cấp trên P1 (LLD 12 bước 11; SRS UC-18/FR-ASK, ADR-014): V6, tool
+`ask_superior`, `get_my_questions`, `answer_question`, `cancel_question` (ghi chú:
+LLD 4.2), `pdca_core/questions`, job `question_expire` trong scheduler, skill
+`/pdca:hoi-cap-tren`, `/pdca:cau-hoi-den-toi`. Agent soạn nháp (FR-ASK-09..11) là P2. Người nhận do `resolve_recipient` chọn: trưởng
+phòng trực thuộc, hoặc cấp kế tiếp khi vị trí đó trống (OI-11 đã chốt hướng này).
+
+Thiết kế v0.2 (hai cửa vào + registry tool `pdca_core.tools`, web chat, phiên đăng nhập,
+ADR-015) **chưa cài đặt**; code hiện tại là cửa MCP thuần (v0.1). Lệch hiện trạng cần
+xử lý khi làm v0.2 (chi tiết: LLD 12, bước 12): `submit_report` đang ghi thẳng
+`submitted` (đích: chỉ `draft_by_agent`, nộp qua API web); `UserContext.channel` và
+`audit_log.actor_kind` mới có `mcp`/`user_mcp`; `answer_question send` là tool model gọi
+được (xem LLD 3.3 mục 6); bảng `web_sessions` sẽ ở migration V7.
 
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
 (OI-04), hook Claude Code (OI-09), cách đăng nhập web P1 (OI-12).

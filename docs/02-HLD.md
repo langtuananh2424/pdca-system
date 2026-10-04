@@ -408,6 +408,7 @@ Tùy chọn thay thế (Java/Spring AI MCP) chưa được kiểm tra mức hoà
 | ADR-011 | Agent Service dùng chung lớp nghiệp vụ với MCP, không gọi qua MCP vòng ngoài | Một bộ kiểm tra quyền, bớt hop mạng | Hai cửa vào phải cùng giữ hợp đồng |
 | ADR-012 | Không dùng đường truy cập model vi phạm điều khoản (ví dụ proxy dùng OAuth của IDE) | Rủi ro khóa tài khoản và lộ dữ liệu | Bị giới hạn ở nhà cung cấp chính thức |
 | ADR-013 | Pilot trên gói cá nhân chỉ với dữ liệu ít nhạy cảm; trước khi dùng dữ liệu thật chuyển sang API/Team | Điều khoản dữ liệu của gói cá nhân | Chi phí tăng khi chạy thật |
+| ADR-014 | Hỏi cấp trên: người nhận lấy từ cơ cấu (không từ tham số); trợ lý của người nhận chỉ soạn nháp, người nhận duyệt rồi mới gửi | Giữ FR-SB-01/02, ADR-009, ADR-010: nội dung riêng của cấp trên không ra ngoài khi họ chưa xem | Trả lời chậm hơn tự động hóa hoàn toàn |
 | ADR-015 | (v0.2) Hai cửa vào song song, một registry tool: web chat là cửa chính, Claude Code + MCP là cửa phụ. Tool khai báo một lần trong `pdca_core`; tool mà model gọi được chỉ tạo bản nháp báo cáo, chuyển sang `submitted` là thao tác của người trên web | Phần lớn nhân viên không dùng Claude Code; web cho máy chủ kiểm soát prompt, rule, chi phí và nút xác nhận; người kỹ thuật vẫn làm việc trong Claude Code | Thêm một cửa vào phải bảo trì; ở Claude Code, prompt và rule nằm ở máy khách nên không kiểm soát được, chi phí mô hình theo gói của từng người; chốt ngày từ Claude Code cần thêm một lần bấm trên web |
 
 ## 13. Lộ trình triển khai theo pha

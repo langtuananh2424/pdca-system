@@ -23,4 +23,22 @@ tests/          unit, integration, permission_matrix
 deploy/         docker-compose, Dockerfile, Caddyfile
 ```
 
+## Chạy cục bộ
+
+```bash
+cp deploy/.env.example deploy/.env   # đặt mật khẩu
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+Lệnh trên dựng PostgreSQL 16 và chạy Flyway. Thêm `--profile apps --build` để
+dựng MCP Server (`http://localhost:8010/mcp`); thêm `--profile caddy` nếu cần
+HTTPS qua Caddy (`https://localhost/mcp`). Cấp token:
+
+```bash
+docker compose -f deploy/docker-compose.yml exec mcp pdca-admin token issue --email staff.a1@example.com
+```
+
+Triển khai lên máy chủ (sau nginx + Cloudflare Tunnel, hoặc Caddy + Let's Encrypt),
+CI/CD từ nhánh `main` và nối Claude Code bằng `claude mcp add`: `deploy/README.md`.
+
 Lộ trình cài đặt P1: LLD mục 12.

@@ -1,0 +1,22 @@
+# Site nginx cho MCP Server khi máy chủ đã có nginx + Cloudflare Tunnel (deploy/README.md mục 2A).
+# Cloudflare Tunnel kết thúc TLS rồi chuyển HTTP vào nginx cổng 80; nginx chuyển tiếp
+# vào MCP Server đang mở trên 127.0.0.1:${MCP_HTTP_PORT} (mặc định 8010).
+# Sao chép vào /etc/nginx/sites-available/pdca, sửa server_name và cổng, rồi bật site.
+server {
+    listen 80;
+    server_name pdca.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8010;
+        proxy_http_version 1.1;
+        # MCP Server chỉ nhận Host trong MCP_ALLOWED_HOSTS (= PDCA_DOMAIN).
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        # Streamable HTTP có thể trả SSE: không đệm, chờ đủ lâu.
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+        client_max_body_size 1m;
+    }
+}

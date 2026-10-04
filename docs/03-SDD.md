@@ -259,6 +259,8 @@ Quy tắc: `pdca_core` không phụ thuộc vào `llm`, `channels`, `mcp_adapter
 | `tasks` | id, plan_id, project_id, assignee_id, title, due_date, status | | Nội bộ |
 | `task_events` | task_id, from_status, to_status, by, at, note | | Nội bộ |
 | `activities` | id, user_id, project_id, task_id, summary, at | tóm tắt đã duyệt | Nội bộ |
+| `questions` | id, asker_id, recipient_id, project_id?, task_id?, body, status, due_at, decline_reason | chỉ người hỏi và người nhận đọc | Hạn chế |
+| `question_answers` | id, question_id, author_id, status, body, source_refs, sent_at | `draft_by_agent` chỉ người nhận thấy (P2) | Hạn chế |
 | `reports` | id, user_id, project_id, report_date, done, blockers, schedule_conflicts, source, status, raw_text_approved | duy nhất (user, project, ngày) | Nội bộ |
 | `blockers` | id, report_id, kind, severity, text | | Nội bộ |
 | `summaries` | id, scope, scope_id, period, content, generated_at, source_report_ids | | Nội bộ |
@@ -419,6 +421,19 @@ stateDiagram-v2
     apply_failed --> proposed: sinh lại đề xuất
 ```
 
+#### Câu hỏi gửi cấp trên
+
+```mermaid
+stateDiagram-v2
+    [*] --> open: người hỏi gửi (người nhận do hệ thống chọn)
+    open --> answered: người nhận xác nhận gửi trả lời
+    open --> declined: người nhận từ chối kèm lý do
+    open --> expired: quá hạn, không trả lời
+    open --> cancelled: người hỏi rút
+```
+
+Bản nháp của agent (P2) là bản ghi `question_answers.draft_by_agent`, không đổi trạng thái câu hỏi; chỉ người nhận chuyển được sang `answered`.
+
 #### Token và tin nhắn
 
 ```mermaid
@@ -564,6 +579,7 @@ run_job(job, scheduled_for):
 | FR-DASH | 4.2 | `dashboard` |
 | FR-AUD | 4.5, 4.9 | `audit`, `audit_log` |
 | FR-AGT | 4.6, 4.12 | `llm`, `llm_usage` |
+| FR-ASK-01..11 | 4.5, 4.10, 4.11.1 | `questions`, `question_answers`, `authz.can` (`question.*`) |
 | NFR-SEC | 4.6, 4.9, 4.11.1, 4.12 | `authz`, proxy, giới hạn |
 | NFR-PRV | 4.5.2, 4.11.4, 4.11.5 | `raw_text_approved`, bộ lọc tổng hợp |
 | NFR-REL | 4.6, 4.11.7 | Outbox, `job_runs` |

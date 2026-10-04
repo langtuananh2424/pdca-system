@@ -1,0 +1,160 @@
+# Docker Compose cục bộ (LLD 9.1, lộ trình P1 bước 1).
+# Chạy từ gốc repo:
+#   cp deploy/.env.example deploy/.env      # rồi đặt mật khẩu
+#   docker compose -f deploy/docker-compose.yml up -d            # db + flyway
+#   docker compose -f deploy/docker-compose.yml --profile apps up -d --build
+# Profile "apps": mcp + scheduler. Profile "caddy": thêm Caddy (TLS tự động) khi máy
+# chủ không có reverse proxy sẵn; máy chủ đã có nginx thì trỏ nginx vào MCP_HTTP_PORT.
+# Profile "workers": agent
+# (chưa có entrypoint — chờ nhận trả lời). Profile "mail": Mailpit — SMTP giả
+# cho dev, xem thư ở http://localhost:8025 (đặt CHANNEL_KIND=email, SMTP_HOST=mailpit,
+# SMTP_PORT=1025, SMTP_SECURITY=none).
+# Triển khai lên máy chủ và nối Claude Code: deploy/README.md.
+name: pdca
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  image: pdca-system:dev
+  profiles: [apps]
+  restart: unless-stopped
+  depends_on:
+    flyway:
+      condition: service_completed_successfully
+  environment: &app-env
+    # Tài khoản pdca_app (LLD 2.3); quyền trên bảng do migration cấp.
+    DATABASE_URL: postgresql://pdca_app:${PDCA_APP_PASSWORD:?đặt trong deploy/.env}@db:5432/pdca
+    PDCA_ENV: ${PDCA_ENV:-dev}
+    TZ_DEFAULT: ${TZ_DEFAULT:-Asia/Bangkok}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pdca
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?đặt trong deploy/.env}
+      # Dùng bởi deploy/initdb/01-roles.sh khi khởi tạo volume lần đầu.
+      FLYWAY_PASSWORD: ${FLYWAY_PASSWORD:?đặt trong deploy/.env}
+      PDCA_APP_PASSWORD: ${PDCA_APP_PASSWORD:?đặt trong deploy/.env}
+      PDCA_READONLY_PASSWORD: ${PDCA_READONLY_PASSWORD:?đặt trong deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Chỉ mở trên loopback để chạy test/psql từ máy dev.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d pdca"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  flyway:
+    image: flyway/flyway:12-alpine
+    command: migrate
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/pdca
+      FLYWAY_USER: flyway
+      FLYWAY_PASSWORD: ${FLYWAY_PASSWORD:?đặt trong deploy/.env}
+      # Dev nạp thêm seed (db/seed); staging/prod đặt FLYWAY_LOCATIONS=filesystem:/flyway/sql.
+      FLYWAY_LOCATIONS: ${FLYWAY_LOCATIONS:-filesystem:/flyway/sql,filesystem:/flyway/seed}
+      FLYWAY_CONNECT_RETRIES: "10"
+    volumes:
+      - ../db/migration:/flyway/sql:ro
+      - ../db/seed:/flyway/seed:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  mcp:
+    <<: *app
+    command: ["python", "-m", "apps.mcp_server"]
+    environment:
+      <<: *app-env
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8000"
+      # Host mà reverse proxy chuyển tiếp (tên miền công khai) — chống DNS rebinding của SDK.
+      MCP_ALLOWED_HOSTS: ${PDCA_DOMAIN:-localhost},${PDCA_DOMAIN:-localhost}:*,localhost:*,127.0.0.1:*
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-60}
+      OUTPUT_MAX_ROWS: ${OUTPUT_MAX_ROWS:-100}
+      OUTPUT_MAX_BYTES: ${OUTPUT_MAX_BYTES:-51200}
+      # Hỏi cấp trên (FR-ASK): kênh phải trùng scheduler để bộ gửi lấy được tin báo.
+      CHANNEL_KIND: ${CHANNEL_KIND:-log}
+      QUESTION_TTL_DAYS: ${QUESTION_TTL_DAYS:-3}
+      QUESTION_MAX_OPEN: ${QUESTION_MAX_OPEN:-5}
+      QUESTION_MAX_PER_DAY: ${QUESTION_MAX_PER_DAY:-10}
+    ports:
+      # Chỉ loopback: nginx trên máy chủ (hoặc client cục bộ) gọi http://127.0.0.1:<cổng>/mcp.
+      - "127.0.0.1:${MCP_HTTP_PORT:-8010}:8000"
+
+  agent:
+    <<: *app
+    profiles: [workers]
+    command: ["python", "-m", "apps.agent_service"]
+    environment:
+      <<: *app-env
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL_SMALL: ${LLM_MODEL_SMALL:-}
+      LLM_MODEL_MEDIUM: ${LLM_MODEL_MEDIUM:-}
+      LLM_MODEL_LARGE: ${LLM_MODEL_LARGE:-}
+      LLM_MONTHLY_BUDGET_USD: ${LLM_MONTHLY_BUDGET_USD:-}
+      CHANNEL_KIND: ${CHANNEL_KIND:-}
+      CHANNEL_CREDENTIALS: ${CHANNEL_CREDENTIALS:-}
+      RULES_REPO_URL: ${RULES_REPO_URL:-}
+      RULES_REF: ${RULES_REF:-}
+
+  scheduler:
+    <<: *app
+    command: ["python", "-m", "apps.scheduler"]
+    environment:
+      <<: *app-env
+      # log = chỉ ghi log, không gửi (dev); email = SMTP (LLD 6.2).
+      CHANNEL_KIND: ${CHANNEL_KIND:-log}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
+      NTF_MAX_PER_DAY: ${NTF_MAX_PER_DAY:-3}
+      OUTBOX_MAX_ATTEMPTS: ${OUTBOX_MAX_ATTEMPTS:-5}
+      QUESTION_TTL_DAYS: ${QUESTION_TTL_DAYS:-3}
+      # Để trống = lịch mặc định (LLD 5.2, apps/scheduler/settings.py).
+      JOB_MORNING_NUDGE_CRON: ${JOB_MORNING_NUDGE_CRON:-}
+      JOB_PROGRESS_ASK_CRON: ${JOB_PROGRESS_ASK_CRON:-}
+      JOB_PROGRESS_REMIND_CRON: ${JOB_PROGRESS_REMIND_CRON:-}
+      JOB_MARK_NOT_REPORTED_CRON: ${JOB_MARK_NOT_REPORTED_CRON:-}
+      JOB_QUESTION_EXPIRE_CRON: ${JOB_QUESTION_EXPIRE_CRON:-}
+
+  proxy:
+    image: caddy:2-alpine
+    profiles: [caddy]
+    restart: unless-stopped
+    environment:
+      PDCA_DOMAIN: ${PDCA_DOMAIN:-localhost}
+    ports:
+      # 80: Let's Encrypt (HTTP-01) và chuyển hướng sang HTTPS; 443: MCP qua TLS.
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [mcp]
+
+  mailpit:
+    image: axllent/mailpit:v1.31
+    profiles: [mail]
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+
+volumes:
+  pgdata: {}
+  caddy_data: {}
