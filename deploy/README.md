@@ -10,6 +10,34 @@ MCP Server mở trên `127.0.0.1:${MCP_HTTP_PORT}` (mặc định 8010); TLS do 
 - **2B — máy chủ riêng có IP công khai**: bật thêm Caddy (`--profile caddy`), TLS tự
   động bằng Let's Encrypt.
 
+## 0. Hiện trạng máy chủ đích
+
+Khảo sát ngày 2026-10-04. **Chưa triển khai PDCA lên máy chủ này.** Máy chủ đang chạy
+dự án khác (PPS English) nên PDCA phải tránh đụng cổng, thư mục và runner. Repo này công
+khai: không ghi tên tài khoản, hostname máy chủ hay đường dẫn cá nhân vào đây; bản kiểm kê
+chi tiết giữ ngoài repo.
+
+| Hạng mục | Hiện trạng | Hệ quả cho PDCA |
+|---|---|---|
+| Cổng loopback đã bị dự án khác chiếm | 3100, 3101, 5432, 5433, 5434, 8080, 8081, 9000, 9002 | **Không dùng 5434 cho `DB_PORT`** (từng gợi ý ở bản cũ): dùng `5435`. MCP giữ `8010` (đang trống). Kiểm tra lại trước khi chạy: `sudo ss -ltn \| grep -E ':(5435\|8010)\b'` phải rỗng. |
+| Tên container/volume | Dự án khác dùng tiền tố `pps-` và `ppsvn-` | Compose đặt project `pdca` (container `pdca-*`, volume `pdca_pgdata`) nên không trùng. |
+| Mạng | nginx nghe cổng 80, mỗi dự án một site theo `server_name`; TLS do Cloudflare Tunnel (không có IP công khai) | Dùng mục 2A: thêm một site nginx và một hostname trên tunnel. Không dùng Caddy (mục 2B). Luôn `sudo nginx -t` trước khi reload vì nginx này đang phục vụ dự án khác. |
+| Tài nguyên | Dư dả cho PDCA (RAM khả dụng hàng chục GB, đĩa trống hàng chục GB) | Không cần tinh chỉnh. |
+| Runner CI | Đã có một runner của dự án khác; chưa có runner cho repo này | Runner khác không nhận job của repo này. Nếu bật CI/CD (mục 7) phải cài runner riêng, nhãn `pdca`, thư mục riêng. |
+| Thư mục triển khai | `/opt` đang chứa thư mục của dự án khác; `/opt/pdca-system` chưa tạo | Clone vào `/opt/pdca-system` (mục 2). |
+
+**Chưa kiểm tra (làm trước khi triển khai):**
+
+- Tunnel Cloudflare quản lý bằng dashboard hay tệp `config.yml` (quyết định cách thêm hostname ở mục 2A).
+- Hostname dành cho PDCA (ví dụ `pdca.<tên miền công ty>`) chưa chốt; `PDCA_DOMAIN` phải trùng tên này.
+- Tài khoản chạy runner có thuộc nhóm `docker` không.
+
+**Lưu ý bảo mật về runner (mục 7).** Runner chạy cùng máy với dự án khác và tài khoản chạy
+runner cần nhóm `docker`, tức gần như quyền root trên máy: workflow của repo này về lý thuyết
+tác động được tới container của dự án khác. Nếu bật CI/CD: giới hạn môi trường `production`
+cho nhánh `main`, đặt người duyệt bắt buộc (Required reviewers) và duyệt tay PR từ fork. Khi
+chưa cần tự động, triển khai tay (mục 5) là lựa chọn an toàn hơn cho giai đoạn pilot.
+
 ## 1. Chuẩn bị máy chủ
 
 - Linux có Docker Engine và plugin Compose v2 (`docker compose version`).
@@ -26,8 +54,8 @@ sudo mkdir -p /opt/pdca-system && sudo chown "$USER" /opt/pdca-system
 git clone https://github.com/langtuananh2424/pdca-system.git /opt/pdca-system
 cd /opt/pdca-system
 sh deploy/init-env.sh pdca.congty.vn        # tạo deploy/.env, sinh mật khẩu ngẫu nhiên
-# Máy chủ đã có Postgres ở 5432: đổi cổng loopback của DB pdca.
-sed -i 's/^DB_PORT=.*/DB_PORT=5434/' deploy/.env
+# Máy chủ đích đã có Postgres ở 5432–5434 (mục 0): dùng cổng loopback khác cho DB pdca.
+sed -i 's/^DB_PORT=.*/DB_PORT=5435/' deploy/.env
 docker compose -f deploy/docker-compose.yml --profile apps up -d --build
 docker compose -f deploy/docker-compose.yml --profile apps ps
 curl -s localhost:8010/mcp -H 'Content-Type: application/json' \
