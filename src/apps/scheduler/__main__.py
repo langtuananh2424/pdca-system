@@ -23,6 +23,7 @@ from apps.scheduler.settings import Settings
 from pdca_core.job_runner import run_job
 from pdca_core.outreach import jobs, outbox
 from pdca_core.outreach.compose import TemplateComposer
+from pdca_core.questions import service as question_service
 
 logger = logging.getLogger("pdca.scheduler")
 
@@ -34,6 +35,9 @@ def job_functions(pool: ConnectionPool, settings: Settings) -> dict[str, JobFn]:
         channel=settings.channel_kind, max_messages_per_day=settings.max_messages_per_day
     )
     composer = TemplateComposer()
+    questions = question_service.QuestionSettings(
+        channel=settings.channel_kind, ttl_days=settings.question_ttl_days
+    )
     tz = ZoneInfo(settings.timezone)
     return {
         "morning_nudge": lambda now: jobs.morning_nudge(pool, now, outreach, composer).detail(),
@@ -42,6 +46,9 @@ def job_functions(pool: ConnectionPool, settings: Settings) -> dict[str, JobFn]:
         "mark_not_reported": lambda now: jobs.mark_not_reported(
             pool, now.astimezone(tz).date()
         ).detail(),
+        "question_expire": lambda now: {
+            "expired": len(question_service.expire_overdue(pool, questions))
+        },
     }
 
 

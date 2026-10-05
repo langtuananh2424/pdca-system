@@ -9,6 +9,11 @@
       "name": "pdca",
       "source": "./plugin",
       "description": "Rule công ty/phòng ban, lệnh chốt ngày và kết nối MCP Server PDCA"
+    },
+    {
+      "name": "pdca-tasks",
+      "source": "./mods/pdca-tasks",
+      "description": "Mod theo dõi task PDCA: pane /pdca-tasks và dòng trạng thái (chỉ đọc)"
     }
   ]
 }

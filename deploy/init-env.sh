@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 # Tạo deploy/.env cho máy chủ từ deploy/.env.example, sinh mật khẩu ngẫu nhiên.
 #   sh deploy/init-env.sh <tên miền> [--no-seed]
-# <tên miền>: tên miền trỏ về IP máy chủ (Caddy xin chứng chỉ Let's Encrypt).
+# <tên miền>: tên miền công khai của MCP Server (hostname trên Cloudflare Tunnel, hoặc
+#   tên miền trỏ về IP máy chủ khi dùng Caddy + Let's Encrypt).
 #   Chưa có tên miền: dùng <ip-có-gạch-ngang>.sslip.io, ví dụ 203-0-113-7.sslip.io.
 # --no-seed: không nạp dữ liệu mẫu db/seed (staging/prod thật).
 # Không ghi đè deploy/.env đã có: mật khẩu DB chỉ đặt được khi khởi tạo volume.

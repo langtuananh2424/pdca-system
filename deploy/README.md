@@ -1,37 +1,120 @@
 # Triển khai MCP Server lên máy chủ và nối Claude Code
 
 Mục tiêu: dựng MCP Server (Streamable HTTP, `https://<tên miền>/mcp`) trên một
-máy chủ Linux bằng Docker Compose, rồi nối Claude Code vào để thử. Stack giống
-bản cục bộ (LLD 9.1): PostgreSQL 16 + Flyway + MCP Server + Caddy (TLS tự động
-bằng Let's Encrypt) + Scheduler (kênh `log`, không gửi tin ra ngoài).
+máy chủ Linux bằng Docker Compose, rồi nối Claude Code vào để thử. Stack (LLD 9.1):
+PostgreSQL 16 + Flyway + MCP Server + Scheduler (kênh `log`, không gửi tin ra ngoài).
+MCP Server mở trên `127.0.0.1:${MCP_HTTP_PORT}` (mặc định 8010); TLS do lớp phía trước lo:
+
+- **2A — máy chủ đã có nginx + Cloudflare Tunnel** (máy chủ chung với dự án khác,
+  không có IP công khai): thêm một site nginx và một hostname trên tunnel.
+- **2B — máy chủ riêng có IP công khai**: bật thêm Caddy (`--profile caddy`), TLS tự
+  động bằng Let's Encrypt.
+
+## 0. Hiện trạng máy chủ đích
+
+Kiểm tra ngày 2026-10-04. **Chưa triển khai PDCA lên máy chủ này.** Máy chủ đang chạy các dự
+án khác (PPS English, website công khai) nên PDCA phải tránh đụng cổng, thư mục, tài khoản và
+runner. Repo này công khai: không ghi tên tài khoản, hostname, địa chỉ IP, dải mạng, quy tắc
+tường lửa hay đường dẫn cá nhân vào đây; bản kiểm kê chi tiết giữ ngoài repo.
+
+| Hạng mục | Hiện trạng | Hệ quả cho PDCA |
+|---|---|---|
+| Cổng loopback | Các cổng 5432–5434 đã bị dự án khác dùng; `5435`, `8010`, `8025` đang trống | **Không dùng 5434 cho `DB_PORT`**: dùng `5435`. MCP giữ `8010`. Kiểm tra lại trước khi chạy: `sudo ss -ltn \| grep -E ':(5435\|8010\|8025)'` phải rỗng (8025 là giao diện Mailpit, profile `mail`). |
+| Tên container/volume/mạng | Dự án khác dùng tiền tố `pps-` và `ppsvn-` | Compose đặt project `pdca` (container `pdca-*`, volume `pdca_pgdata`) nên không trùng. |
+| Mạng | nginx nghe cổng 80, mỗi dự án một site theo `server_name`; TLS do một Cloudflare Tunnel dùng chung (không có IP công khai); không mở 80/443 ra ngoài | Dùng mục 2A, không dùng Caddy (2B). Site `pdca` phải đặt đúng `server_name` (= `PDCA_DOMAIN`). Luôn `sudo nginx -t` trước khi reload vì nginx này đang phục vụ dự án khác. |
+| Tunnel | Cấu hình bằng tệp (không dùng dashboard); mục cuối của `ingress` là `http_status:404` | Chèn hostname PDCA ngay trước mục cuối (mục 2A). Restart `cloudflared` làm gián đoạn mọi hostname trên tunnel: làm ngoài giờ. |
+| Tài nguyên | Dư dả cho PDCA; ổ đĩa dùng chung với các dự án khác | Không cần tinh chỉnh; theo dõi dung lượng khi có dữ liệu thật. |
+| Runner CI | Đã có một runner của dự án khác; chưa có runner cho repo này | Runner khác không nhận job của repo này. Nếu bật CI/CD (mục 7) phải cài runner riêng, nhãn `pdca`, thư mục riêng, **tài khoản riêng**. |
+| Thư mục triển khai | `/opt/pdca-system` chưa tạo | Clone vào `/opt/pdca-system` (mục 2). |
+| Sao lưu | Backup tự động của máy chủ không bao gồm DB `pdca` | Làm backup cho PDCA (LLD 9.2) trước khi nạp dữ liệu thật. |
+
+**Chưa chốt (làm trước khi triển khai):**
+
+- Hostname dành cho PDCA (ví dụ `pdca.<tên miền công ty>`); `PDCA_DOMAIN` phải trùng tên này. Hostname nên cùng zone Cloudflare với các hostname đang có trên tunnel; khác zone thì phải đăng nhập lại `cloudflared`.
+- Cách vào PDCA ở P1: tunnel công khai (mục 2A) hay mạng riêng/VPN (SRS NFR-SEC-01).
+
+**Lưu ý bảo mật về runner (mục 7).** Runner chạy cùng máy với dự án khác và tài khoản chạy
+runner cần nhóm `docker`, tức gần như quyền root trên máy. Không dùng tài khoản đang chạy
+runner của dự án khác: workflow của repo này sẽ đọc được thư mục và dữ liệu của dự án đó. Tạo
+tài khoản riêng chỉ sở hữu `/opt/pdca-system` và thư mục runner. Nếu bật CI/CD: giới hạn môi trường
+`production` cho nhánh `main`, đặt người duyệt bắt buộc (Required reviewers) và duyệt tay PR từ
+fork. Khi chưa cần tự động, triển khai tay (mục 5) là lựa chọn an toàn hơn cho giai đoạn pilot.
+
+## Chạy thử trên máy cá nhân (Windows)
+
+Một lệnh dựng stack local, cấp token mẫu (không in ra màn hình), đăng ký MCP cho Claude Code và cấu hình mod `mods/pdca-tasks`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev\setup-local.ps1
+```
+
+Cần Docker Desktop và Claude Code CLI (`claude`). Script tạo `deploy\.env` với mật khẩu ngẫu nhiên và cổng DB/MCP còn trống, chạy lại an toàn (bước nào xong thì bỏ qua). Cờ: `-DryRun` chỉ in các bước, `-Down` tắt stack, `-Reset` xóa dữ liệu rồi nạp lại seed, `-Force` cấp lại token và ghi đè cấu hình, `-NoTokens`/`-NoMcp`/`-NoMod` bỏ từng phần, `-HeadEmail`/`-StaffEmail` đổi tài khoản mẫu. Xong thì tắt hẳn app Claude, mở lại và gõ `/pdca-tasks`.
 
 ## 1. Chuẩn bị máy chủ
 
 - Linux có Docker Engine và plugin Compose v2 (`docker compose version`).
 - 1 vCPU, 1–2 GB RAM là đủ để thử.
-- Mở cổng **80** và **443** TCP (Caddy cần cổng 80 để xin chứng chỉ). Ví dụ với ufw:
-  `sudo ufw allow 80,443/tcp`.
-- Một tên miền có bản ghi A trỏ về IP máy chủ, ví dụ `pdca.congty.vn`.
-  Chưa có tên miền thì dùng `sslip.io`: IP `203.0.113.7` → tên miền
-  `203-0-113-7.sslip.io` (tự phân giải về IP đó, Let's Encrypt cấp được chứng chỉ).
+- Clone vào thư mục riêng (ví dụ `/opt/pdca-system`), không chung với dự án khác.
+  Compose đặt tên project `pdca` nên container/volume tách khỏi dự án khác.
+- Cổng trên loopback không được trùng dự án khác: `sudo ss -ltnp | grep -E ':(5432|8010)\b'`.
+  Trùng thì đổi `DB_PORT` / `MCP_HTTP_PORT` trong `deploy/.env` (mục 2).
 
 ## 2. Dựng stack
 
 ```bash
-git clone https://github.com/langtuananh2424/pdca-system.git
-cd pdca-system
+sudo mkdir -p /opt/pdca-system && sudo chown "$USER" /opt/pdca-system
+git clone https://github.com/langtuananh2424/pdca-system.git /opt/pdca-system
+cd /opt/pdca-system
 sh deploy/init-env.sh pdca.congty.vn        # tạo deploy/.env, sinh mật khẩu ngẫu nhiên
+# Máy chủ đích đã có Postgres ở 5432–5434 (mục 0): dùng cổng loopback khác cho DB pdca.
+sed -i 's/^DB_PORT=.*/DB_PORT=5435/' deploy/.env
 docker compose -f deploy/docker-compose.yml --profile apps up -d --build
 docker compose -f deploy/docker-compose.yml --profile apps ps
+curl -s localhost:8010/mcp -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"whoami","arguments":{}}}'
+# → có chữ "unauthorized" là MCP Server đã chạy
 ```
 
 `init-env.sh` mặc định **nạp dữ liệu mẫu** (`db/seed`: 2 phòng, 7 người dùng
 `*@example.com`) để thử ngay. Khi triển khai thật, chạy
-`sh deploy/init-env.sh <tên miền> --no-seed` trên volume mới.
+`sh deploy/init-env.sh <tên miền> --no-seed` trên volume mới. `PDCA_DOMAIN` trong
+`deploy/.env` phải đúng tên miền công khai: MCP Server từ chối Host khác (`421`).
 
-Kiểm tra Caddy đã lấy chứng chỉ (dòng `certificate obtained successfully`):
+### 2A. Sau nginx + Cloudflare Tunnel
+
+1. Site nginx: mẫu ở `deploy/nginx/pdca.conf.example` (sửa `server_name` và cổng).
+
+   ```bash
+   sudo cp deploy/nginx/pdca.conf.example /etc/nginx/sites-available/pdca
+   sudo nano /etc/nginx/sites-available/pdca          # server_name pdca.congty.vn;
+   sudo ln -s /etc/nginx/sites-available/pdca /etc/nginx/sites-enabled/pdca
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+2. Cloudflare Tunnel: thêm một mục `ingress` cho hostname PDCA vào cấu hình của `cloudflared`.
+   Làm ngoài giờ vì restart làm gián đoạn mọi hostname đang chạy trên tunnel:
+
+   ```bash
+   sudo cp /etc/cloudflared/config.yml /etc/cloudflared/config.yml.bak
+   sudo nano /etc/cloudflared/config.yml
+   # Thêm TRƯỚC dòng cuối "- service: http_status:404":
+   #   - hostname: pdca.congty.vn
+   #     service: http://localhost:80
+   sudo cloudflared tunnel ingress validate
+   sudo systemctl restart cloudflared && sudo journalctl -u cloudflared -n 20 --no-pager
+   sudo cloudflared tunnel route dns <tên-tunnel> pdca.congty.vn   # tạo CNAME vào tunnel
+   ```
+
+   Chỉ thêm record cho hostname PDCA; không dùng `--overwrite-dns`. Cloudflare tự cấp TLS.
+
+### 2B. Máy chủ riêng với Caddy
+
+Mở cổng **80** và **443** (Caddy cần cổng 80 để xin chứng chỉ), tên miền có bản ghi A
+trỏ về IP máy chủ (chưa có thì dùng `<ip-có-gạch-ngang>.sslip.io`). Chạy thêm profile `caddy`:
 
 ```bash
+docker compose -f deploy/docker-compose.yml --profile apps --profile caddy up -d --build
 docker compose -f deploy/docker-compose.yml logs proxy | grep -i certificate
 ```
 
@@ -67,7 +150,7 @@ claude mcp add --transport http pdca https://pdca.congty.vn/mcp \
 claude mcp list          # pdca: ... (HTTP) - √ Connected
 ```
 
-Trong phiên Claude Code: `/mcp` thấy server `pdca` với 15 tool; thử hỏi
+Trong phiên Claude Code: `/mcp` thấy server `pdca` với 21 tool; thử hỏi
 "gọi tool whoami của pdca" hoặc "việc của tôi hôm nay".
 
 Lệnh trên lưu token dạng rõ trong `~/.claude.json`, chỉ nên dùng để thử. Cho
@@ -75,6 +158,8 @@ nhân viên dùng thật, cài plugin `pdca` (`plugin/README.md`): token nằm t
 bí mật của hệ điều hành, kèm rule và lệnh `/pdca:chot-ngay`.
 
 ## 5. Cập nhật phiên bản
+
+Mặc định bản mới lên máy chủ tự động qua CI/CD (mục 7). Cập nhật tay khi cần:
 
 ```bash
 git pull
@@ -97,6 +182,38 @@ docker compose -f deploy/docker-compose.yml exec db psql -U postgres -d pdca -c 
 
 `role`: `staff`, `dept_head`, `director`, `admin` (LLD 2.1, bảng `users`).
 
+## 7. CI/CD: `develop` → `main` → máy chủ
+
+- `develop`: nhánh phát triển. PR tính năng nhắm vào `develop`; CI (`.github/workflows/ci.yml`,
+  job `check`, chạy trên runner của GitHub) chạy ruff, mypy, pytest.
+- `main`: nhánh release. Mở PR `develop` → `main`; khi merge, CI chạy lại `check` rồi job
+  `deploy` chạy **trên self-hosted runner đặt tại máy chủ** (máy chủ sau Cloudflare Tunnel
+  nên GitHub không SSH vào được): fast-forward thư mục `DEPLOY_PATH` đúng commit đó,
+  `docker compose ... --profile apps up -d --build`, rồi gọi thử `/mcp`.
+- Không cần secret nào: runner đã ở trên máy chủ.
+
+**Cài runner (một lần, trên máy chủ).** Runner của repo khác (ví dụ pps-education) không
+nhận job của repo này, nên cài thêm một runner riêng, trong thư mục riêng:
+
+1. GitHub → repo `pdca-system` → Settings → Actions → Runners → *New self-hosted runner* →
+   Linux; làm theo các lệnh hiện ra, **bằng tài khoản riêng của PDCA** trong thư mục mới, ví dụ `~/actions-runner-pdca`.
+2. Khi `./config.sh` hỏi nhãn (*labels*), nhập `pdca`; tên runner tùy ý.
+3. Chạy như dịch vụ: `sudo ./svc.sh install <user> && sudo ./svc.sh start`. `<user>` cần
+   thuộc nhóm `docker` và có quyền ghi vào `DEPLOY_PATH`.
+
+**Trên GitHub:**
+
+- Settings → Environments → `production`: mục *Deployment branches and tags* chọn
+  *Selected branches and tags*, thêm `main`. Thêm **variable** (không phải secret)
+  `DEPLOY_PATH` = `/opt/pdca-system`; `MCP_HTTP_PORT` nếu đổi khỏi 8010.
+- Settings → Actions → General → *Fork pull request workflows from outside
+  collaborators*: chọn **Require approval for all external contributors**. Repo public
+  có self-hosted runner: PR từ fork có thể sửa workflow để chạy lên runner; duyệt tay
+  trước khi chạy là lớp chặn chính. Không bấm duyệt PR fork có sửa `.github/workflows/`.
+
+Thư mục `DEPLOY_PATH` phải ở nhánh `main`, không có commit hay sửa đổi riêng (tệp
+`deploy/.env` đã gitignore nên được giữ nguyên).
+
 ## Sự cố thường gặp
 
 | Hiện tượng | Nguyên nhân / cách xử lý |
@@ -105,7 +222,10 @@ docker compose -f deploy/docker-compose.yml exec db psql -U postgres -d pdca -c 
 | `421` / `Invalid Host header` | `PDCA_DOMAIN` trong `deploy/.env` khác tên miền đang gọi; sửa rồi `up -d` lại. |
 | `unauthorized` | Token sai, hết hạn hoặc đã thu hồi; thiếu tiền tố `Bearer `. |
 | `claude mcp list` báo lỗi kết nối | Thử lệnh `curl` ở mục 3 trên cùng máy để tách lỗi mạng/TLS khỏi lỗi cấu hình Claude Code. |
+| Job `deploy` lỗi `Not possible to fast-forward` | Thư mục trên máy chủ có commit/sửa đổi riêng; `git status` rồi đưa về `origin/main`. |
+| Job `deploy` treo ở *Waiting for a runner* | Runner nhãn `pdca` chưa chạy: `sudo ./svc.sh status` trong thư mục runner. |
+| `502 Bad Gateway` từ nginx | MCP Server chưa lên hoặc sai cổng: `curl localhost:8010/mcp` như mục 2; khớp `proxy_pass` với `MCP_HTTP_PORT`. |
 | Đổi mật khẩu trong `.env` không có tác dụng | Mật khẩu DB chỉ đặt khi khởi tạo volume (`deploy/initdb/`); đổi bằng `ALTER ROLE` hoặc xóa volume `pdca_pgdata` (mất dữ liệu). |
 
 Ghi chú bảo mật: PostgreSQL chỉ mở trên `127.0.0.1` của máy chủ; `deploy/.env`
-có quyền 600 và không commit. Sao lưu (LLD 9.2) chưa tự động hóa.
+có quyền 600 và không commit. Sao lưu (LLD 9.2) chưa tự động hóa và backup của máy chủ không bao gồm DB `pdca` (mục 0).

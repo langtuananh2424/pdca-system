@@ -23,6 +23,30 @@ class Membership:
     project_role: str
 
 
+@dataclass(frozen=True, slots=True)
+class ProjectMember:
+    user_id: int
+    name: str
+    role: str
+    project_role: str
+
+
+def list_project_members(conn: Connection[Any], project_id: int, limit: int) -> list[ProjectMember]:
+    """Thành viên đang hoạt động của project (không lộ email hay trạng thái nghỉ phép)."""
+    with conn.cursor(row_factory=class_row(ProjectMember)) as cur:
+        return cur.execute(
+            """
+            select u.id as user_id, u.name, u.role, pm.project_role
+            from project_members pm
+            join users u on u.id = pm.user_id
+            where pm.project_id = %s and u.status = 'active' and u.deleted_at is null
+            order by pm.project_role desc, u.name, u.id
+            limit %s
+            """,
+            (project_id, limit),
+        ).fetchall()
+
+
 def get_profile(conn: Connection[Any], user_id: int) -> Profile | None:
     with conn.cursor(row_factory=class_row(Profile)) as cur:
         return cur.execute(

@@ -21,6 +21,18 @@ class TaskRow:
 
 
 @dataclass(frozen=True, slots=True)
+class ProjectTaskRow:
+    id: int
+    title: str
+    plan_id: int | None
+    due_date: date | None
+    status: str
+    assignee_id: int
+    assignee_name: str
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class ActivityRow:
     id: int
     at: datetime
@@ -58,6 +70,46 @@ def list_for_assignee(
                 "assignee": assignee_id,
                 "statuses": list(statuses),
                 "project": project_id,
+                "paged": after is not None,
+                "after_due": after_due,
+                "after_id": after_id,
+                "limit": limit,
+            },
+        ).fetchall()
+
+
+def list_for_project(
+    conn: Connection[Any],
+    project_id: int,
+    statuses: Sequence[str],
+    assignee_id: int | None,
+    after: tuple[date | None, int] | None,
+    limit: int,
+) -> list[ProjectTaskRow]:
+    """Task của một project (mọi người thực hiện); cùng thứ tự và khóa phân trang với
+    `list_for_assignee`."""
+    after_due, after_id = after if after is not None else (None, 0)
+    with conn.cursor(row_factory=class_row(ProjectTaskRow)) as cur:
+        return cur.execute(
+            """
+            select t.id, t.title, t.plan_id, t.due_date, t.status, t.assignee_id,
+                   u.name as assignee_name, t.updated_at
+            from tasks t
+            join users u on u.id = t.assignee_id
+            where t.project_id = %(project)s
+              and t.deleted_at is null
+              and t.status = any(%(statuses)s)
+              and (%(assignee)s::bigint is null or t.assignee_id = %(assignee)s)
+              and (not %(paged)s
+                   or (coalesce(t.due_date, 'infinity'::date), t.id)
+                      > (coalesce(%(after_due)s::date, 'infinity'::date), %(after_id)s))
+            order by coalesce(t.due_date, 'infinity'::date), t.id
+            limit %(limit)s
+            """,
+            {
+                "project": project_id,
+                "statuses": list(statuses),
+                "assignee": assignee_id,
                 "paged": after is not None,
                 "after_due": after_due,
                 "after_id": after_id,

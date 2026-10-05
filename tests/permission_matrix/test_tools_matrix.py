@@ -292,6 +292,31 @@ CASES: list[tuple[str, str, Call, set[str]]] = [
         ),
         {"director"},
     ),
+    # --- Tra cứu cho trưởng phòng: list_project_tasks (task.read.team), list_project_members
+    (
+        "list_project_tasks",
+        "project_same_department",
+        lambda c, p, w, r: task_service.list_project_tasks(c, p, project_id=w.project_a),
+        {"dept_head", "director"},  # staff chỉ xem task của mình qua get_my_tasks
+    ),
+    (
+        "list_project_tasks",
+        "project_other_department",
+        lambda c, p, w, r: task_service.list_project_tasks(c, p, project_id=w.project_b),
+        {"director"},
+    ),
+    (
+        "list_project_members",
+        "member_project",
+        lambda c, p, w, r: org_service.project_members(c, p, project_id=w.project_a),
+        set(ROLES),  # thành viên project (mọi vai trò), trưởng phòng, giám đốc
+    ),
+    (
+        "list_project_members",
+        "project_other_department",
+        lambda c, p, w, r: org_service.project_members(c, p, project_id=w.project_b),
+        {"director"},
+    ),
     # --- Mức nhóm (UC-06): get_project_status, get_team_blockers
     (
         "get_project_status",

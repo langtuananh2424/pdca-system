@@ -15,6 +15,10 @@ class Settings:
     port: int
     allowed_hosts: list[str]
     db_pool_max: int
+    channel_kind: str
+    question_ttl_days: int
+    question_max_open: int
+    question_max_per_day: int
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Settings":
@@ -35,4 +39,10 @@ class Settings:
                 if h.strip()
             ],
             db_pool_max=int(env.get("DB_POOL_MAX", "10")),
+            # Kênh của tin báo hỏi–đáp: phải trùng CHANNEL_KIND của scheduler (bộ gửi chỉ
+            # lấy tin của kênh nó đang chạy).
+            channel_kind=env.get("CHANNEL_KIND", "log"),
+            question_ttl_days=int(env.get("QUESTION_TTL_DAYS", "3")),
+            question_max_open=int(env.get("QUESTION_MAX_OPEN", "5")),
+            question_max_per_day=int(env.get("QUESTION_MAX_PER_DAY", "10")),
         )

@@ -4,20 +4,22 @@
 | Mục | Giá trị |
 |---|---|
 | Mã tài liệu | AIA-SRS-001 |
-| Phiên bản | 0.1 (bản nháp) |
-| Ngày | 2026-10-01 |
+| Phiên bản | 0.2 (bản nháp, đang soạn) |
+| Ngày | 2026-10-04 |
 | Chuẩn tham chiếu | ISO/IEC/IEEE 29148:2018 (Requirements engineering) |
 | Tác giả | Lăng Tuấn Anh (IT / Backend) |
 | Chủ sở hữu nghiệp vụ | Thầy Phúc |
 | Trạng thái | Nháp, chờ rà soát |
 
-> **Quy ước.** Từ "phải" (shall) chỉ yêu cầu bắt buộc, "nên" (should) chỉ yêu cầu mong muốn, "có thể" (may) chỉ tùy chọn. Mỗi yêu cầu có mã duy nhất để truy vết sang SDD, HLD, LLD. Cột **Ưu tiên** theo MoSCoW (M/S/C/W). Cột **Pha** là P1 (MVP một phòng ban), P2 (RAG, phân quyền mở rộng, tổng hợp nhiều cấp), P3 (mở rộng toàn công ty, web chat).
+> **Quy ước.** Từ "phải" (shall) chỉ yêu cầu bắt buộc, "nên" (should) chỉ yêu cầu mong muốn, "có thể" (may) chỉ tùy chọn. Mỗi yêu cầu có mã duy nhất để truy vết sang SDD, HLD, LLD. Cột **Ưu tiên** theo MoSCoW (M/S/C/W). Cột **Pha** là P1 (MVP một phòng ban), P2 (RAG, phân quyền mở rộng, tổng hợp nhiều cấp), P3 (mở rộng toàn công ty).
 
 ### Lịch sử thay đổi
 
 | Phiên bản | Ngày | Nội dung |
 |---|---|---|
 | 0.1 | 2026-10-01 | Bản nháp đầu tiên, dựa trên sơ đồ tổng quan và các trao đổi ý tưởng |
+| 0.2 | 2026-10-03 | Thêm UC-18 và nhóm FR-ASK (hỏi cấp trên, người nhận duyệt rồi mới trả lời), AC-09..10, OI-11 |
+| 0.2 | 2026-10-04 | (Đang soạn) Hai cửa vào song song: web chat là cửa chính, Claude Code + MCP là cửa phụ, dùng chung một registry tool (FR-AUTH-02, FR-AUTH-06..08, EIR-09, OI-03, OI-12). Báo cáo do trợ lý soạn luôn ở trạng thái nháp, người dùng xác nhận trên web (UC-04, NFR-USE-01) |
 
 ---
 
@@ -68,7 +70,8 @@ Tài liệu xác định yêu cầu cho Hệ thống Trợ lý AI phân cấp ("
 - AIA-HLD-001, AIA-SDD-001, AIA-LLD-001 (bộ tài liệu đi kèm).
 
 ### 1.5 Bối cảnh quyết định đã có
-- Đội làm việc chủ yếu trên **Claude Code**.
+- Đội kỹ thuật làm việc chủ yếu trên **Claude Code**; phần lớn nhân viên không dùng công cụ này.
+- **Hai cửa vào song song (v0.2):** web chat là cửa vào chính cho mọi người; Claude Code + MCP là cửa phụ cho người làm kỹ thuật. Hai cửa dùng chung lớp nghiệp vụ, phân quyền và registry tool (HLD ADR-015).
 - Công ty **không dùng Active Directory**; người dùng và vai trò do chính Hệ thống quản lý.
 - **Claude Tag** (agent của Anthropic trong Slack) được khảo sát và **không chọn làm nền chính** vì: routine không nhắn riêng từng người, mọi người trong kênh có quyền như nhau, MCP server phải truy cập được qua internet. Có thể dùng bổ trợ ở pha sau.
 - Phương án chọn: **tự xây** MCP server + agent service + scheduler, dùng chung một backend dữ liệu.
@@ -183,6 +186,7 @@ flowchart TB
 | UC-15 | Quản lý second brain | ACT-01..03 | P2 |
 | UC-16 | Xem dashboard | ACT-02, ACT-03 | P2 |
 | UC-17 | Tra cứu nhật ký kiểm toán | ACT-04 | P1 |
+| UC-18 | Hỏi cấp trên khi vướng mắc | ACT-01..03 (người hỏi), ACT-02..03 (người trả lời) | P1; AI soạn nháp: P2 |
 
 ### UC-04 Chốt ngày và nộp báo cáo (mẫu chi tiết)
 
@@ -190,9 +194,9 @@ flowchart TB
 |---|---|
 | Tác nhân chính | Nhân viên |
 | Tiền điều kiện | Đã xác thực; có ít nhất một project được gán |
-| Luồng chính | 1) Nhân viên gõ lệnh chốt ngày trong Claude Code. 2) Trợ lý tóm tắt công việc trong phiên và dữ liệu hoạt động trong ngày. 3) Trợ lý hiển thị bản nháp gồm: đã làm, vướng gì, xung đột lịch. 4) Nhân viên sửa và xác nhận. 5) Trợ lý gọi tool nộp báo cáo. 6) Hệ thống lưu báo cáo, ghi audit, trả mã báo cáo. |
-| Luồng thay thế | 4a) Nhân viên từ chối: không lưu gì. 5a) Đã có báo cáo của project trong ngày: hỏi ghi đè hoặc bổ sung. |
-| Ngoại lệ | Token hết hạn → UC-01. Project không thuộc người dùng → từ chối. |
+| Luồng chính | 1) Nhân viên yêu cầu chốt ngày trong web chat. 2) Trợ lý tóm tắt công việc trong phiên và dữ liệu hoạt động trong ngày. 3) Trợ lý soạn bản nháp gồm: đã làm, vướng gì, xung đột lịch. 4) Nhân viên sửa đến khi đồng ý. 5) Trợ lý gọi tool lưu báo cáo ở trạng thái `draft_by_agent`. 6) Web hiển thị thẻ bản nháp; nhân viên bấm **Duyệt**. 7) Hệ thống chuyển báo cáo sang `submitted`, ghi audit, trả mã báo cáo. |
+| Luồng thay thế | 1a) Nhân viên dùng lệnh `/chot-ngay` trong Claude Code: bước 2–5 diễn ra trong Claude Code, trợ lý trả đường dẫn để nhân viên xác nhận ở bước 6 trên web. 4a) Nhân viên từ chối: không lưu gì. 5a) Đã có báo cáo của project trong ngày: hỏi ghi đè hoặc bổ sung. |
+| Ngoại lệ | Token hoặc phiên đăng nhập hết hạn → UC-01. Project không thuộc người dùng → từ chối. |
 | Hậu điều kiện | Báo cáo trạng thái `submitted` gắn người, project, ngày. |
 | Yêu cầu liên quan | FR-CHK-01..04, FR-AUTH-02, FR-AUD-01, NFR-PRV-01 |
 
@@ -207,6 +211,18 @@ flowchart TB
 | Hậu điều kiện | Có báo cáo hoặc dấu "chưa báo cáo" cho ngày đó. |
 | Yêu cầu liên quan | FR-NTF-01..07, FR-CHK-05..06 |
 
+### UC-18 Hỏi cấp trên khi vướng mắc
+
+| Mục | Nội dung |
+|---|---|
+| Tác nhân chính | Người hỏi (nhân viên hoặc trưởng phòng), người trả lời (cấp trên trực tiếp) |
+| Tiền điều kiện | Cả hai đã xác thực và đang hoạt động; hệ thống xác định được người nhận (trưởng phòng trực thuộc, hoặc cấp kế tiếp khi vị trí đó trống — FR-ASK-02) |
+| Luồng chính | 1) Người hỏi gõ câu hỏi trong Claude Code, có thể gắn project/task. 2) Hệ thống xác định người nhận từ cơ cấu tổ chức (không phải tham số), kiểm tra hạn mức, lưu câu hỏi `open`. 3) Hệ thống báo cho người trả lời qua kênh đã cấu hình; tin chỉ nêu có câu hỏi mới, không kèm nội dung. 4) Người trả lời mở danh sách câu hỏi nhận được trong Claude Code. 5) (P2) Trợ lý của người trả lời soạn bản nháp từ nguồn được phép, kèm trích dẫn; bản nháp chỉ người trả lời thấy. 6) Người trả lời viết hoặc sửa, rồi xác nhận gửi. 7) Hệ thống lưu câu trả lời, câu hỏi thành `answered`, báo cho người hỏi. |
+| Luồng thay thế | 1a) Người hỏi rút câu hỏi khi còn `open` → `cancelled`. 2a) Không xác định được người nhận hoặc vượt hạn mức → từ chối. 6a) Người trả lời từ chối kèm lý do → `declined`. 6b) Quá hạn không trả lời → `expired`, người hỏi được báo; hệ thống không tự trả lời thay. |
+| Ngoại lệ | Người khác (kể cả cấp trên của người trả lời và quản trị) xem hoặc trả lời → `forbidden_or_not_found`. |
+| Hậu điều kiện | Câu hỏi ở trạng thái cuối; chỉ người hỏi và người trả lời đọc được nội dung; có audit (không chứa nội dung). |
+| Yêu cầu liên quan | FR-ASK-01..11, FR-AUTH-02, FR-AGT-05, FR-SB-01..02, FR-AUD-01, NFR-PRV-01 |
+
 ---
 
 ## 4. Yêu cầu chức năng (FR)
@@ -216,10 +232,13 @@ flowchart TB
 | Mã | Yêu cầu | Ưu tiên | Pha |
 |---|---|---|---|
 | FR-AUTH-01 | Hệ thống phải xác thực mọi lời gọi MCP bằng bearer token gắn với một người dùng. | M | P1 |
-| FR-AUTH-02 | Danh tính người gọi phải lấy từ token, không bao giờ từ tham số do model truyền vào. | M | P1 |
+| FR-AUTH-02 | Danh tính người gọi phải lấy từ token (MCP) hoặc phiên đăng nhập (web), không bao giờ từ tham số do model truyền vào. | M | P1 |
 | FR-AUTH-03 | Token phải được lưu dạng băm, có hạn dùng, có thể thu hồi và xoay vòng. | M | P1 |
-| FR-AUTH-04 | Hệ thống phải từ chối lời gọi khi token sai, hết hạn hoặc tài khoản bị khóa, và ghi audit. | M | P1 |
+| FR-AUTH-04 | Hệ thống phải từ chối lời gọi khi token hoặc phiên đăng nhập sai, hết hạn, bị thu hồi hoặc tài khoản bị khóa, và ghi audit. | M | P1 |
 | FR-AUTH-05 | Hệ thống nên hỗ trợ OAuth 2.1 (PKCE, khám phá metadata) qua một nhà cung cấp danh tính ngoài, vẫn lấy vai trò từ bảng người dùng của Hệ thống. | S | P2 |
+| FR-AUTH-06 | Web chat phải xác thực bằng đăng nhập và phiên phía server: mã phiên lưu dạng băm, cookie `HttpOnly` + `Secure` + `SameSite`, có hạn dùng và thu hồi được. Cách đăng nhập P1 theo OI-12. | M | P1 |
+| FR-AUTH-07 | Mọi cửa vào (web chat, MCP) phải dùng chung một registry tool: mỗi tool khai báo một lần với cùng tên, lược đồ vào ra, hành động phân quyền, và cùng đi qua `can` và audit. | M | P1 |
+| FR-AUTH-08 | Chế độ giả lập người dùng (đăng nhập thay người khác để thử) chỉ được bật khi môi trường là `dev`; ở `staging`/`prod` phải bị khóa ở server. | M | P1 |
 
 ### 4.2 Tổ chức, vai trò, project (ORG)
 
@@ -344,6 +363,22 @@ flowchart TB
 | FR-AGT-04 | Agent service phải đo và ghi lại token và chi phí theo tác vụ. | S | P2 |
 | FR-AGT-05 | Nội dung do người dùng nhập (báo cáo, ghi chú) phải được coi là dữ liệu không đáng tin, không được thực thi như chỉ thị. | M | P1 |
 
+### 4.13 Hỏi cấp trên (ASK)
+
+| Mã | Yêu cầu | Ưu tiên | Pha |
+|---|---|---|---|
+| FR-ASK-01 | Người dùng phải gửi được câu hỏi hoặc vướng mắc (≤ 2000 ký tự) tới cấp trên của mình (người nhận theo FR-ASK-02), tùy chọn gắn project và task thuộc phạm vi của người hỏi. | M | P1 |
+| FR-ASK-02 | Người nhận phải do hệ thống xác định từ cơ cấu tổ chức (FR-ORG-02), không nhận từ tham số do model truyền: là trưởng phòng trực thuộc đang hoạt động; khi vị trí đó trống (không có, bị khóa hoặc đã xóa; nghỉ phép không tính) thì là cấp kế tiếp trong chuỗi quản lý (hỏi vượt cấp, OI-11). Không gửi được cho người ngang cấp, cấp dưới hay ngoài chuỗi quản lý. | M | P1 |
+| FR-ASK-03 | Câu hỏi và câu trả lời chỉ người hỏi và người nhận đọc được; mọi người khác, kể cả cấp trên của người nhận và quản trị, nhận `forbidden_or_not_found`. | M | P1 |
+| FR-ASK-04 | Câu trả lời chỉ tới người hỏi sau khi người nhận chủ động xác nhận gửi; AI không được tự gửi hay tự trả lời thay người nhận. | M | P1 |
+| FR-ASK-05 | Câu hỏi phải có vòng đời `open → answered, declined, expired, cancelled`; quá hạn cấu hình thì chuyển `expired` và báo người hỏi; hệ thống không suy đoán câu trả lời. | M | P1 |
+| FR-ASK-06 | Hệ thống phải báo qua kênh (outbox) khi có câu hỏi mới và khi có trả lời, từ chối hoặc hết hạn; nội dung tin không chứa nội dung câu hỏi hay câu trả lời. | M | P1 |
+| FR-ASK-07 | Hệ thống phải giới hạn số câu hỏi đang mở và số câu hỏi mỗi ngày của mỗi người (cấu hình), vượt thì `rate_limited`. | M | P1 |
+| FR-ASK-08 | Nội dung câu hỏi là dữ liệu không đáng tin, không được thực thi như chỉ thị (FR-AGT-05); mọi lời gọi ghi audit (FR-AUD-01) và audit không chứa nội dung câu hỏi hay câu trả lời. | M | P1 |
+| FR-ASK-09 | Trợ lý của người nhận phải soạn được bản nháp trả lời từ nguồn người nhận được phép đọc (báo cáo `submitted`, kế hoạch, task trong phạm vi), kèm trích dẫn nguồn; bản nháp chỉ người nhận thấy, mang trạng thái `draft_by_agent`. | M | P2 |
+| FR-ASK-10 | Nội dung second brain (FR-SB-01) chỉ được đưa vào câu trả lời qua bản nháp mà chủ sở hữu đã xem và duyệt từng lần; không bao giờ tự động, và không sao chép nội dung ghi chú vào audit hay log. | M | P2 |
+| FR-ASK-11 | Agent chỉ gửi LLM đoạn tối thiểu liên quan tới câu hỏi (NFR-PRV-01) và bọc câu hỏi trong khối dữ liệu không đáng tin. | S | P2 |
+
 ---
 
 ## 5. Yêu cầu phi chức năng (NFR)
@@ -412,7 +447,7 @@ flowchart TB
 
 | Mã | Yêu cầu |
 |---|---|
-| NFR-USE-01 | Lệnh thường dùng (xem task, chốt ngày) hoàn thành bằng một lệnh trong Claude Code. |
+| NFR-USE-01 | Việc thường dùng (xem task, chốt ngày) hoàn thành bằng một câu chat trên web, hoặc một lệnh trong Claude Code cộng một lần bấm xác nhận trên web. |
 | NFR-USE-02 | Nội dung tin nhắn và báo cáo bằng tiếng Việt, ngắn gọn, không làm phiền quá giới hạn FR-NTF-04. |
 | NFR-CMP-01 | Dùng nhà cung cấp LLM theo điều khoản thương mại, không dùng đường truy cập vi phạm điều khoản (DC-06, DC-07). |
 
@@ -430,6 +465,7 @@ flowchart TB
 | EIR-06 | Hệ thống ↔ Nguồn lịch | (P2) Đọc lịch rảnh/bận qua API chuẩn của nhà cung cấp lịch. |
 | EIR-07 | Hệ thống ↔ Nguồn tài liệu | (P2) Adapter nguồn tài liệu để lập chỉ mục. |
 | EIR-08 | Người dùng ↔ Dashboard | (P2) Giao diện web chỉ đọc cho trưởng phòng và thầy Phúc. |
+| EIR-09 | Người dùng ↔ Web chat | (P1, cửa vào chính) HTTPS, phiên đăng nhập (FR-AUTH-06). Máy chủ chạy vòng hội thoại qua `LLMClient` có tool calling, gọi tool qua registry chung (FR-AUTH-07). Thao tác có tác động (duyệt, xác nhận báo cáo) đi qua API xác thực bằng phiên, không phải tool mà model gọi được. |
 
 ---
 
@@ -450,7 +486,7 @@ flowchart TB
 
 | Use case | Yêu cầu chính |
 |---|---|
-| UC-01 | FR-AUTH-01..04 |
+| UC-01 | FR-AUTH-01..04, FR-AUTH-06, FR-AUTH-08 |
 | UC-02 | FR-TASK-03, FR-ORG-03 |
 | UC-03 | FR-ACT-01..03 |
 | UC-04 | FR-CHK-01..04, FR-CHK-06 |
@@ -467,6 +503,7 @@ flowchart TB
 | UC-15 | FR-SB-01..03 |
 | UC-16 | FR-DASH-01..03 |
 | UC-17 | FR-AUD-01..03 |
+| UC-18 | FR-ASK-01..11, FR-AUTH-02, FR-AGT-05 |
 
 ---
 
@@ -482,6 +519,8 @@ flowchart TB
 | AC-06 | Bản tổng hợp cấp trên không chứa nội dung second brain hoặc chat thô. | FR-AGG-04, NFR-PRV-01 |
 | AC-07 | Mọi lời gọi tool trong thời gian thử nghiệm đều có bản ghi audit. | FR-AUD-01 |
 | AC-08 | Chạy lại tác vụ định kỳ hai lần không tạo bản ghi hoặc tin nhắn trùng. | NFR-REL-03 |
+| AC-09 | Chỉ người hỏi và người nhận đọc được một câu hỏi và câu trả lời của nó; trưởng phòng khác, giám đốc, quản trị đều bị từ chối; câu hỏi luôn tới người nhận do hệ thống xác định (FR-ASK-02) bất kể model truyền gì. | FR-ASK-02..03, FR-AUTH-02 |
+| AC-10 | Không có câu trả lời nào tới người hỏi khi người nhận chưa xác nhận gửi; nội dung second brain không xuất hiện trong câu trả lời nếu chủ sở hữu chưa duyệt. | FR-ASK-04, FR-ASK-10 |
 
 ---
 
@@ -491,7 +530,7 @@ flowchart TB
 |---|---|---|---|
 | OI-01 | Kênh nhắn tin nào (Slack, Teams, Zalo, email)? Zalo OA có giới hạn nhắn chủ động. | Lăng Tuấn Anh | FR-NTF-07, EIR-04 |
 | OI-02 | Quy mô công ty, số phòng ban, phòng thử nghiệm và số project? | Thầy Phúc | Chi phí, NFR-PERF |
-| OI-03 | Thầy Phúc và các trưởng phòng dùng Claude Code hay cần giao diện web? | Thầy Phúc | EIR-08, P3 |
+| OI-03 | ~~Thầy Phúc và các trưởng phòng dùng Claude Code hay cần giao diện web?~~ **Đã chốt (v0.2):** web chat là cửa vào chính cho mọi vai trò; Claude Code là cửa phụ (HLD ADR-015). | Lăng Tuấn Anh | EIR-09 |
 | OI-04 | Gói Claude cho nhân viên: Team, API key công ty, hay Pro cá nhân (chỉ phù hợp pilot)? | Ban lãnh đạo | DC-06, chi phí |
 | OI-05 | Nguồn đăng nhập chính thức ở P2 (Keycloak tự host, Google, Microsoft)? | Lăng Tuấn Anh | FR-AUTH-05 |
 | OI-06 | Tài liệu nằm ở đâu (git, Drive, Notion, thư mục)? Chưa có. | Lăng Tuấn Anh | FR-RAG-04 |
@@ -499,6 +538,8 @@ flowchart TB
 | OI-08 | Xác nhận pháp lý về xử lý dữ liệu cá nhân của nhân viên. | Pháp chế | NFR-PRV-03 |
 | OI-09 | Hook Claude Code: tên hook, tham số hiện hành cần kiểm tra trước khi làm. | Lăng Tuấn Anh | FR-ACT-03 |
 | OI-10 | Đặc tả MCP còn thay đổi; cần theo dõi bản phát hành. | Lăng Tuấn Anh | GA-05 |
+| OI-11 | Hướng đã chốt (2026-10-03): chỉ hỏi vượt cấp khi không có trưởng phòng trực thuộc đang hoạt động; khi đó hỏi cấp kế tiếp trong chuỗi quản lý (LLD 4.2, `resolve_recipient`). Chuỗi đứt hẳn (thiếu `manager_id`…) thì từ chối, không chuyển cho giám đốc ngoài chuỗi; quản trị phải cấu hình `manager_id` đầy đủ trước khi nạp dữ liệu thật. | Thầy Phúc | FR-ASK-02 |
+| OI-12 | Cách đăng nhập web ở P1 khi chưa có IdP: mật khẩu băm (argon2id) do quản trị cấp, hay liên kết đăng nhập một lần gửi qua email (phụ thuộc OI-01)? | Lăng Tuấn Anh | FR-AUTH-06 |
 
 | Rủi ro | Mức | Giảm thiểu |
 |---|---|---|
@@ -508,3 +549,4 @@ flowchart TB
 | Đặc tả MCP/SDK thay đổi | Trung bình | Stateless, khóa phiên bản, kiểm thử tích hợp |
 | Prompt injection qua nội dung báo cáo | Trung bình | FR-AGT-05, NFR-SEC-06 |
 | Chi phí LLM vượt dự kiến | Trung bình | NFR-COST-01, định tuyến model, caching |
+| Hỏi dồn dập hoặc dùng trợ lý cấp trên để thăm dò dữ liệu riêng | Trung bình | FR-ASK-03, FR-ASK-04, FR-ASK-07, FR-ASK-10 |

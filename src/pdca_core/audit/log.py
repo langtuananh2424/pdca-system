@@ -39,7 +39,9 @@ class AuditWriter(Protocol):
 
 # Tham số dạng chuỗi được giữ nguyên: định danh, liệt kê, ngày. Mọi chuỗi khác
 # (nội dung người dùng: done, blockers, summary, note...) chỉ giữ độ dài.
-_VERBATIM_KEY = re.compile(r"(^|_)(id|ids|date|status|mode|level|kind|severity|cursor)$")
+_VERBATIM_KEY = re.compile(
+    r"(^|_)(id|ids|date|status|mode|level|kind|severity|cursor|action|side)$"
+)
 
 
 def redact_params(params: Mapping[str, Any]) -> dict[str, Any]:

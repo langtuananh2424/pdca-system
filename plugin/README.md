@@ -8,6 +8,9 @@ Gồm:
 | Rule | `hooks/hooks.json`, `hooks/session-start.sh`, `rules/*.md` | Đầu mỗi phiên nạp rule công ty + phòng đã chọn (FR-RULE-02/03) |
 | `/pdca:chot-ngay [ngày]` | `skills/chot-ngay/SKILL.md` | Soạn nháp báo cáo ngày → người dùng duyệt → nộp (UC-04) |
 | `/pdca:viec-cua-toi [trạng thái]` | `skills/viec-cua-toi/SKILL.md` | Xem task của mình |
+| `/pdca:bat-dau [project]` | `skills/bat-dau/SKILL.md` | Dựng lại ngữ cảnh đầu phiên: việc mở/quá hạn/bị chặn, báo cáo hôm nay, câu hỏi chờ; trưởng phòng xem thêm nhóm (chỉ đọc) |
+| `/pdca:hoi-cap-tren [câu hỏi]` | `skills/hoi-cap-tren/SKILL.md` | Soạn câu hỏi → người dùng duyệt → gửi cấp trên; xem câu đã gửi (UC-18) |
+| `/pdca:cau-hoi-den-toi [mã]` | `skills/cau-hoi-den-toi/SKILL.md` | Xem và trả lời câu hỏi gửi tới mình (UC-18) |
 
 `rules/*.md` là **tệp sinh ra** từ thư mục `rules/` ở gốc repo — đừng sửa tay;
 chạy `uv run pdca-admin rules build` rồi commit.

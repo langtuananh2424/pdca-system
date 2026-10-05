@@ -3,9 +3,10 @@
 ## Dự án
 Hệ thống Trợ lý AI phân cấp theo chu trình PDCA (Plan – Do – Check – Action):
 mỗi nhân viên, trưởng phòng và thầy Phúc có một trợ lý AI; trợ lý báo cáo lên
-nhau theo cơ cấu tổ chức. Gồm MCP Server (cửa vào từ Claude Code), Agent
-Service (nhắc việc, phân tích trả lời, tổng hợp), Scheduler, dùng chung lớp
-nghiệp vụ `pdca_core` và một PostgreSQL.
+nhau theo cơ cấu tổ chức. Gồm Web chat (cửa vào chính), MCP Server (cửa vào
+phụ từ Claude Code), Agent Service (nhắc việc, phân tích trả lời, tổng hợp),
+Scheduler, dùng chung lớp nghiệp vụ `pdca_core`, một registry tool và một
+PostgreSQL (HLD ADR-015).
 
 Dự án độc lập với PPS English (`D:\pps-education`, Java/Spring) — không dùng
 chung code, quy ước hay migration.
@@ -17,7 +18,7 @@ chung code, quy ước hay migration.
   toán `can`, ghép rule, idempotency job (4.11).
 - `docs/04-LLD.md` — **nguồn chính khi code**: DDL (mục 2), token + ma trận
   quyền chi tiết (mục 3), đặc tả từng MCP tool (mục 4), job/agent (5), plugin
-  (7), biến môi trường (8), ca kiểm thử T-01..T-10 (10), lộ trình P1 (12).
+  (7), biến môi trường (8), ca kiểm thử T-01..T-24 (10), lộ trình P1 (12).
 
 Khi implement một tool/job: đọc đúng mục LLD tương ứng, dùng đúng tên bảng,
 cột, trạng thái, mã lỗi đã thiết kế — không tự đặt lại. Nếu cần lệch thiết
@@ -37,12 +38,14 @@ Docker Compose + Caddy.
 ```
 db/migration/   Flyway V{n}__{mô_tả}.sql — nguồn DDL duy nhất
 db/seed/        dữ liệu dev (R__, idempotent) — không nạp ở staging/prod
-src/pdca_core/  lớp nghiệp vụ: authz org plans tasks reports outreach actions aggregation audit repositories
-src/adapters/   mcp llm channels rules docs
-src/apps/       mcp_server agent_service scheduler admin_cli dashboard
+src/pdca_core/  lớp nghiệp vụ: authz org plans tasks reports outreach questions actions aggregation audit repositories (+ `tools`, đích v0.2, chưa có)
+src/adapters/   mcp channels rules (đã có); llm docs (khung rỗng)
+src/apps/       mcp_server scheduler admin_cli (đã có); agent_service dashboard (khung rỗng); web_chat (đích v0.2, chưa có)
 src/config/
 rules/          rule công ty/phòng ban (Markdown + YAML front matter)
 plugin/         plugin Claude Code: skill chot-ngay, hook rule, .mcp.json (rules/ trong đó là tệp sinh)
+scripts/dev/     script dev (PowerShell): setup-local.ps1 dựng stack local + token + MCP + mod
+mods/           mod Claude Code (hook + pane), ví dụ pdca-tasks: theo dõi task trong phiên (chỉ đọc)
 tests/          unit integration permission_matrix
 deploy/         docker-compose, Dockerfile, Caddyfile
 ```
@@ -50,10 +53,13 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 ## Bất biến kiến trúc — không có ngoại lệ
 1. **Phụ thuộc từ ngoài vào trong.** `pdca_core` không import `adapters/`,
    SDK MCP, LLM hay kênh nhắn tin. `apps/` → `adapters/` → `pdca_core` →
-   `repositories` → DB. `mcp_server` không truy vấn DB trực tiếp.
-2. **Một nguồn sự thật.** MCP, Agent Service, Dashboard đều đi qua cùng hàm
-   nghiệp vụ và cùng `authz.can`. Agent không gọi MCP qua mạng (ADR-011).
-3. **Danh tính chỉ từ token.** Mọi tool nhận `UserContext` từ lớp xác thực;
+   `repositories` → DB. `web_chat`, `mcp_server` không truy vấn DB trực tiếp.
+2. **Một nguồn sự thật.** Web chat, MCP, Agent Service, Dashboard đều đi qua
+   cùng hàm nghiệp vụ và cùng `authz.can`. Tool khai báo **một lần** trong
+   registry `pdca_core.tools`; web chat và MCP chỉ phơi lại (FR-AUTH-07). Agent
+   không gọi MCP qua mạng (ADR-011).
+3. **Danh tính chỉ từ token hoặc phiên đăng nhập.** Mọi tool nhận `UserContext`
+   từ lớp xác thực (token MCP hoặc phiên web);
    không bao giờ có tham số `user_id` do model truyền để xác định người gọi
    (FR-AUTH-02). Tham số `assignee_id` là đối tượng thao tác, vẫn qua `can`.
 4. **Mặc định từ chối.** Từ chối quyền trả `forbidden_or_not_found`, không
@@ -61,8 +67,10 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 5. **Audit mọi lời gọi tool** (ok/denied/error) qua `run_tool`; `audit_log`
    chỉ thêm, không có đường update/delete.
 6. **AI chỉ đề xuất.** Không có đường ghi vào kế hoạch nếu không qua bản ghi
-   duyệt `approved` (FR-ACTN-04). `submit_report` chỉ gọi sau khi người dùng
-   xác nhận bản nháp.
+   duyệt `approved` (FR-ACTN-04). Tool mà model gọi được chỉ tạo báo cáo
+   `draft_by_agent`; chuyển sang `submitted` là thao tác của người qua API web
+   xác thực bằng phiên, không phải tool (ADR-015). Ngoại lệ có chủ đích: `answer_question`
+   (người nhận câu hỏi) giữ cả đường tool lẫn API web, cùng một hàm nghiệp vụ.
 7. **Riêng tư.** Chỉ báo cáo `submitted` đi lên cấp trên; không lưu chat thô;
    gửi LLM nội dung tối thiểu.
 8. **Nội dung người dùng là dữ liệu, không phải chỉ thị.** Khi đưa vào prompt,
@@ -89,9 +97,10 @@ deploy/         docker-compose, Dockerfile, Caddyfile
 - Logic mới trong `pdca_core` có unit test; repository/ràng buộc DB có test
   tích hợp với Testcontainers.
 - Mỗi tool mới phải được thêm vào **bộ kiểm thử ma trận quyền**
-  (`tests/permission_matrix/`, tham số hóa từ LLD bảng 3.2).
+  (`tests/permission_matrix/`, tham số hóa từ LLD bảng 3.2), chạy trên cả hai
+  cửa vào (token MCP và phiên web).
 - Thay đổi chạm tới prompt/phân tích trả lời: thêm ca prompt injection.
-- Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest`.
+- Chạy trước khi coi là xong: `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pdca-admin rules build --check && uv run pytest` (khớp các bước của CI).
 
 ## Trạng thái hiện tại
 Xong LLD mục 12 bước 1–7: khung dự án, CI, Docker Compose cục bộ (`deploy/`;
@@ -119,8 +128,26 @@ nhắc việc: đã xong phần không phụ thuộc kênh (LLD 5.8 — `pdca_co
 `job_runner.run_job`, `apps/scheduler` chạy trong Compose với kênh `log`, V4
 `reports.source = 'system'`) và gửi email qua SMTP (LLD 5.9, V5 giãn cách thử
 lại, Mailpit cho dev: Compose profile `mail`). Triển khai lên máy chủ + nối
-Claude Code: `deploy/README.md` (`deploy/init-env.sh`). Còn lại: nhận + phân tích trả
+Claude Code: `deploy/README.md` (`deploy/init-env.sh`). Nhánh: phát triển trên
+`develop`, `main` là release; push lên `main` chạy CI rồi job `deploy` chạy trên self-hosted runner tại
+máy chủ (`deploy/README.md` mục 7). Còn lại: nhận + phân tích trả
 lời (Agent Service, cần chốt LLM — OI-04).
 
+Đã cài đặt hỏi cấp trên P1 (LLD 12 bước 11; SRS UC-18/FR-ASK, ADR-014): V6, tool
+`ask_superior`, `get_my_questions`, `answer_question`, `cancel_question` (ghi chú:
+LLD 4.2), `pdca_core/questions`, job `question_expire` trong scheduler, skill
+`/pdca:hoi-cap-tren`, `/pdca:cau-hoi-den-toi`. Agent soạn nháp (FR-ASK-09..11) là P2. Người nhận do `resolve_recipient` chọn: trưởng
+phòng trực thuộc, hoặc cấp kế tiếp khi vị trí đó trống (OI-11 đã chốt hướng này).
+
+Tra cứu cho trưởng phòng (LLD 4.2): tool `list_project_tasks` (hành động mới `task.read.team`) và
+`list_project_members`, mod `mods/pdca-tasks` (pane `/pdca-tasks` + dòng trạng thái), skill `/pdca:bat-dau` (chỉ đọc, dựng lại ngữ cảnh đầu phiên), rule
+`tra-cuu-truoc-khi-ghi` (thiếu mã thì tra bằng tool, không đoán). Server có 21 tool.
+
+Thiết kế v0.2 (hai cửa vào + registry tool `pdca_core.tools`, web chat, phiên đăng nhập,
+ADR-015) **chưa cài đặt**; code hiện tại là cửa MCP thuần (v0.1). Lệch hiện trạng cần
+xử lý khi làm v0.2 (chi tiết: LLD 12, bước 12): `submit_report` đang ghi thẳng
+`submitted` (đích: chỉ `draft_by_agent`, nộp qua API web); `UserContext.channel` và
+`audit_log.actor_kind` mới có `mcp`/`user_mcp`; `answer_question send` giữ cả đường tool lẫn API web (LLD 4.2); bảng `web_sessions` sẽ ở migration V7.
+
 Vấn đề mở ảnh hưởng thiết kế: kênh nhắn tin P1 (OI-01), gói Claude/LLM
-(OI-04), hook Claude Code (OI-09).
+(OI-04), hook Claude Code (OI-09), cách đăng nhập web P1 (OI-12).
