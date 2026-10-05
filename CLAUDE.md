@@ -44,6 +44,7 @@ src/apps/       mcp_server scheduler admin_cli (đã có); agent_service dashboa
 src/config/
 rules/          rule công ty/phòng ban (Markdown + YAML front matter)
 plugin/         plugin Claude Code: skill chot-ngay, hook rule, .mcp.json (rules/ trong đó là tệp sinh)
+deploy/backup/  sao lưu DB: backup-db.sh, restore-db.sh, systemd timer
 scripts/dev/     script dev (PowerShell): setup-local.ps1 dựng stack local + token + MCP + mod
 mods/           mod Claude Code (hook + pane), ví dụ pdca-tasks: theo dõi task trong phiên (chỉ đọc)
 tests/          unit integration permission_matrix

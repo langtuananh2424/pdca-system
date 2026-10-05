@@ -26,7 +26,7 @@ tường lửa hay đường dẫn cá nhân vào đây; bản kiểm kê chi ti
 | Tài nguyên | Dư dả cho PDCA; ổ đĩa dùng chung với các dự án khác | Không cần tinh chỉnh; theo dõi dung lượng khi có dữ liệu thật. |
 | Runner CI | Đã có một runner của dự án khác; chưa có runner cho repo này | Runner khác không nhận job của repo này. Nếu bật CI/CD (mục 7) phải cài runner riêng, nhãn `pdca`, thư mục riêng, **tài khoản riêng**. |
 | Thư mục triển khai | `/opt/pdca-system` chưa tạo | Clone vào `/opt/pdca-system` (mục 2). |
-| Sao lưu | Backup tự động của máy chủ không bao gồm DB `pdca` | Làm backup cho PDCA (LLD 9.2) trước khi nạp dữ liệu thật. |
+| Sao lưu | Backup tự động của máy chủ không bao gồm DB `pdca` | Dùng backup riêng của PDCA: `deploy/backup/README.md` (cài timer một lần). Bản sao hiện nằm cùng ổ đĩa, chưa có bản ngoài máy chủ. |
 
 **Chưa chốt (làm trước khi triển khai):**
 
@@ -228,4 +228,4 @@ Thư mục `DEPLOY_PATH` phải ở nhánh `main`, không có commit hay sửa �
 | Đổi mật khẩu trong `.env` không có tác dụng | Mật khẩu DB chỉ đặt khi khởi tạo volume (`deploy/initdb/`); đổi bằng `ALTER ROLE` hoặc xóa volume `pdca_pgdata` (mất dữ liệu). |
 
 Ghi chú bảo mật: PostgreSQL chỉ mở trên `127.0.0.1` của máy chủ; `deploy/.env`
-có quyền 600 và không commit. Sao lưu (LLD 9.2) chưa tự động hóa và backup của máy chủ không bao gồm DB `pdca` (mục 0).
+có quyền 600 và không commit. Sao lưu DB `pdca`: `deploy/backup/README.md` (backup hằng ngày bằng systemd timer, khôi phục thử `--verify`); backup của máy chủ không bao gồm DB `pdca` (mục 0).
