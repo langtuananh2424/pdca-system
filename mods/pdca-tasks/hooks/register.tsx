@@ -61,6 +61,10 @@ function todayBangkok(nowMs: number): string {
   return new Date(nowMs + BANGKOK_OFFSET_MS).toISOString().slice(0, 10)
 }
 
+function timeBangkok(nowMs: number): string {
+  return new Date(nowMs + BANGKOK_OFFSET_MS).toISOString().slice(11, 16)
+}
+
 function daysUntil(due: string, today: string): number {
   return Math.round((Date.parse(due) - Date.parse(today)) / DAY_MS)
 }
@@ -246,7 +250,9 @@ export const register: Register = (on, options) => {
         ))}
         <Text dimColor>
           {state.error === '' ? '' : `Lỗi lần làm mới gần nhất: ${state.error}. `}
-          {state.isLoading ? 'Đang làm mới...' : `Cập nhật ${snapshot.userName}`}
+          {state.isLoading
+            ? 'Đang làm mới...'
+            : `Cập nhật lúc ${timeBangkok(snapshot.fetchedAt)} (${snapshot.userName})`}
         </Text>
         <Button key="refresh" label="Làm mới" hotkey="r" onPress={() => refresh($, config)} />
       </Box>
