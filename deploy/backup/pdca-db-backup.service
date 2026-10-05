@@ -1,0 +1,12 @@
+[Unit]
+Description=Sao luu PostgreSQL cua PDCA
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=pdca-runner
+Group=pdca-runner
+Environment=PDCA_BACKUP_DIR=/opt/pdca-backups
+ExecStart=/opt/pdca-system/deploy/backup/backup-db.sh
+Nice=10
