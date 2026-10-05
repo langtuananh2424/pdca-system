@@ -6,6 +6,7 @@ import type { Snapshot, TaskItem, View } from '../types'
 const PANE = 'pdca-tasks'
 const EMPTY: View = { snapshot: null, error: '', isLoading: false }
 const view = atom({ plugin: 'pdca-tasks', key: 'view' } as const, EMPTY)
+const isBandHidden = atom({ plugin: 'pdca-tasks', key: 'isBandHidden' } as const, false)
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000
@@ -206,12 +207,17 @@ async function loadConfig($: EngineInterface, options: PluginOptions): Promise<C
   const envToken = await $.env.get('PDCA_TOKEN')
   const envUrl = await $.env.get('PDCA_SERVER_URL')
   const envAutoOpen = await $.env.get('PDCA_AUTO_OPEN')
+  // Nút bật/tắt trong pane được lưu giữa các phiên và ưu tiên hơn biến môi trường, tùy chọn plugin.
+  const stored = await $.store.get('autoOpen')
   return {
     url: String(options.server_url || envUrl || 'http://localhost:8010/mcp'),
     token: String(options.api_token || envToken || ''),
     seconds: Math.max(MIN_REFRESH_SECONDS, Number(options.refresh_seconds ?? 60)),
     maxProjects: Number(options.max_projects ?? 3),
-    autoOpen: options.auto_open !== false && envAutoOpen !== '0',
+    autoOpen:
+      typeof stored === 'boolean'
+        ? stored
+        : options.auto_open !== false && envAutoOpen !== '0',
   }
 }
 
@@ -283,6 +289,16 @@ export const register: Register = (on, options) => {
       )
     }
 
+    const autoOpenButton = (
+      <Button
+        key="auto-open"
+        label={`Tự mở pane: ${config.autoOpen ? 'bật' : 'tắt'}`}
+        onPress={async () => {
+          await $.store.set('autoOpen', !config.autoOpen)
+          await update($, view, v => ({ ...v }))
+        }}
+      />
+    )
     const today = todayBangkok(snapshot.fetchedAt)
     const isTeam = TEAM_ROLES.includes(snapshot.role)
     let budget = Math.max(6, (e.viewport?.rows ?? 24) - 8)
@@ -325,7 +341,11 @@ export const register: Register = (on, options) => {
             ? 'Đang làm mới...'
             : `Cập nhật lúc ${timeBangkok(snapshot.fetchedAt)} (${snapshot.userName})`}
         </Text>
-        {refreshButton}
+        <Box>
+          {refreshButton}
+          <Text> </Text>
+          {autoOpenButton}
+        </Box>
       </Box>
     )
 
@@ -414,6 +434,29 @@ export const register: Register = (on, options) => {
           )
         })}
         {footer}
+      </Box>
+    )
+  })
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const state = await read($, view)
+    const isQuiet = state.snapshot === null || (await read($, isBandHidden))
+    if (isQuiet || state.snapshot === null) {
+      return next(e)
+    }
+
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const text = summary(state.snapshot, todayBangkok(state.snapshot.fetchedAt))
+
+    return (
+      <Box>
+        <Text dimColor>{text}  </Text>
+        <Button
+          key="open-pane"
+          label="Mở pane"
+          onPress={() => $.ui.open({ id: PANE, title: 'Task PDCA' })}
+        />
+        <Text> </Text>
+        <Button key="hide-band" label="Ẩn" onPress={() => update($, isBandHidden, () => true)} />
       </Box>
     )
   })

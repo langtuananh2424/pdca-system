@@ -30,6 +30,6 @@ export type View = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'pdca-tasks': { view: View }
+    'pdca-tasks': { view: View; isBandHidden: boolean }
   }
 }
