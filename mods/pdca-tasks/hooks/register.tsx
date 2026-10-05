@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
-import type { ProjectTasks, Snapshot, TaskItem, View } from '../types'
+import type { Snapshot, TaskItem, View } from '../types'
 
 const PANE = 'pdca-tasks'
 const EMPTY: View = { snapshot: null, error: '', isLoading: false }
@@ -16,9 +16,11 @@ const STATUS_LABEL: Record<string, string> = {
   in_progress: 'Đang làm',
   todo: 'Chưa làm',
 }
-const STATUS_ORDER = ['blocked', 'in_progress', 'todo']
+const BAR_CELLS = 8
 
 type Json = Record<string, any>
+type Config = { url: string; token: string; seconds: number; maxProjects: number }
+type Due = { text: string; tone: 'bad' | 'warn' | 'normal' }
 
 /** Gọi một tool của PDCA MCP Server (JSON-RPC qua HTTP, token Bearer). */
 async function callTool(
@@ -69,14 +71,49 @@ function daysUntil(due: string, today: string): number {
   return Math.round((Date.parse(due) - Date.parse(today)) / DAY_MS)
 }
 
-function toItem(raw: Json, projectId: number): TaskItem {
+function dueInfo(task: TaskItem, today: string): Due {
+  if (task.dueDate === null) {
+    return { text: 'không hạn', tone: 'normal' }
+  }
+  const days = daysUntil(task.dueDate, today)
+  if (days < 0) {
+    return { text: `quá hạn ${-days} ngày`, tone: 'bad' }
+  }
+  if (days === 0) {
+    return { text: 'hạn hôm nay', tone: 'warn' }
+  }
+  return { text: `hạn ${task.dueDate.slice(8, 10)}/${task.dueDate.slice(5, 7)}`, tone: 'normal' }
+}
+
+function isOverdue(task: TaskItem, today: string): boolean {
+  return task.dueDate !== null && task.dueDate < today
+}
+
+/** Việc cần chú ý: quá hạn, đến hạn hôm nay hoặc bị chặn. */
+function needsAttention(task: TaskItem, today: string): boolean {
+  return task.status === 'blocked' || (task.dueDate !== null && task.dueDate <= today)
+}
+
+function byDueDate(a: TaskItem, b: TaskItem): number {
+  return (a.dueDate ?? '9999-12-31').localeCompare(b.dueDate ?? '9999-12-31') || a.id - b.id
+}
+
+/** Thanh tiến độ bằng ký tự: tỷ lệ việc đã xong trên tổng (đã xong + đang mở). */
+function progressBar(done: number, open: number): string {
+  const total = done + open
+  const filled = total === 0 ? 0 : Math.round((done / total) * BAR_CELLS)
+  return '█'.repeat(filled) + '░'.repeat(BAR_CELLS - filled)
+}
+
+function toItem(raw: Json, assigneeId: number, assignee: string): TaskItem {
   return {
     id: Number(raw.id),
     title: String(raw.title),
     status: String(raw.status),
     dueDate: raw.due_date ? String(raw.due_date) : null,
-    projectId: Number(raw.project_id ?? projectId),
-    assignee: raw.assignee_name ? String(raw.assignee_name) : undefined,
+    projectId: Number(raw.project_id ?? 0),
+    assigneeId: Number(raw.assignee_id ?? assigneeId),
+    assignee: String(raw.assignee_name ?? assignee),
   }
 }
 
@@ -87,48 +124,88 @@ async function fetchSnapshot(
   maxProjects: number,
 ): Promise<Snapshot> {
   const me = await callTool($, url, token, 'whoami', {})
-  const mineData = await callTool($, url, token, 'get_my_tasks', { limit: 100 })
-  const mine = (mineData.items as Json[]).map(raw => toItem(raw, 0))
+  const role = String(me.role)
+  const userId = Number(me.user_id)
+  const userName = String(me.name)
+  const isTeam = TEAM_ROLES.includes(role)
 
-  const team: ProjectTasks[] = []
-  if (TEAM_ROLES.includes(String(me.role))) {
+  const tasks = new Map<number, TaskItem>()
+  const done = new Map<number, number>()
+
+  if (role !== 'admin') {
+    const mine = await callTool($, url, token, 'get_my_tasks', { limit: 100 })
+    for (const raw of mine.items as Json[]) {
+      tasks.set(Number(raw.id), toItem(raw, userId, userName))
+    }
+    if (isTeam) {
+      const mineDone = await callTool($, url, token, 'get_my_tasks', { status: 'done', limit: 100 })
+      for (const raw of mineDone.items as Json[]) {
+        done.set(Number(raw.id), userId)
+      }
+    }
+  }
+
+  if (isTeam) {
     const projects = (me.projects as Json[]).slice(0, Math.max(0, maxProjects))
     for (const project of projects) {
       const projectId = Number(project.id)
       try {
-        const data = await callTool($, url, token, 'list_project_tasks', {
+        const open = await callTool($, url, token, 'list_project_tasks', {
           project_id: projectId,
           limit: 100,
         })
-        team.push({
-          projectId,
-          name: String(project.name),
-          items: (data.items as Json[]).map(raw => toItem(raw, projectId)),
+        for (const raw of open.items as Json[]) {
+          tasks.set(Number(raw.id), toItem(raw, userId, userName))
+        }
+        const finished = await callTool($, url, token, 'list_project_tasks', {
+          project_id: projectId,
+          status: 'done',
+          limit: 100,
         })
+        for (const raw of finished.items as Json[]) {
+          done.set(Number(raw.id), Number(raw.assignee_id))
+        }
       } catch {
         // Project ngoài phạm vi quyền thì bỏ qua, không làm hỏng cả bảng.
       }
     }
   }
+
+  const doneByUser: Record<string, number> = {}
+  for (const assigneeId of done.values()) {
+    doneByUser[String(assigneeId)] = (doneByUser[String(assigneeId)] ?? 0) + 1
+  }
   return {
-    role: String(me.role),
-    userName: String(me.name),
-    mine,
-    team,
+    role,
+    userId,
+    userName,
+    tasks: [...tasks.values()],
+    doneByUser,
     fetchedAt: await $.clock.now(),
   }
 }
 
 function summary(snapshot: Snapshot, today: string): string {
-  const overdue = snapshot.mine.filter(t => t.dueDate !== null && t.dueDate < today).length
-  const blocked = snapshot.mine.filter(t => t.status === 'blocked').length
-  const parts = [`PDCA: ${snapshot.mine.length} việc mở`]
+  const overdue = snapshot.tasks.filter(t => isOverdue(t, today)).length
+  const blocked = snapshot.tasks.filter(t => t.status === 'blocked').length
+  const scope = TEAM_ROLES.includes(snapshot.role) ? 'nhóm' : 'việc'
+  const parts = [`PDCA: ${snapshot.tasks.length} ${scope} mở`]
   if (overdue > 0) parts.push(`${overdue} quá hạn`)
   if (blocked > 0) parts.push(`${blocked} bị chặn`)
   return parts.join(' · ')
 }
 
-type Config = { url: string; token: string; seconds: number; maxProjects: number }
+/** Cấu hình từ `userConfig`; thiếu token/URL thì lấy từ biến môi trường PDCA_TOKEN, PDCA_SERVER_URL. */
+async function loadConfig($: EngineInterface, options: PluginOptions): Promise<Config> {
+  const envToken = await $.env.get('PDCA_TOKEN')
+  const envUrl = await $.env.get('PDCA_SERVER_URL')
+  return {
+    url: String(options.server_url || envUrl || 'http://localhost:8010/mcp'),
+    token: String(options.api_token || envToken || ''),
+    seconds: Math.max(MIN_REFRESH_SECONDS, Number(options.refresh_seconds ?? 60)),
+    maxProjects: Number(options.max_projects ?? 3),
+  }
+}
 
 /** Làm mới dữ liệu; lỗi được ghi vào view, không ném ra ngoài. */
 async function refresh($: EngineInterface, config: Config): Promise<void> {
@@ -144,24 +221,11 @@ async function refresh($: EngineInterface, config: Config): Promise<void> {
   }
 }
 
-/** Cấu hình từ `userConfig`; thiếu token/URL thì lấy từ biến môi trường PDCA_TOKEN, PDCA_SERVER_URL. */
-async function loadConfig($: EngineInterface, options: PluginOptions): Promise<Config> {
-  const envToken = await $.env.get('PDCA_TOKEN')
-  const envUrl = await $.env.get('PDCA_SERVER_URL')
-  return {
-    url: String(options.server_url || envUrl || 'http://localhost:8010/mcp'),
-    token: String(options.api_token || envToken || ''),
-    seconds: Math.max(MIN_REFRESH_SECONDS, Number(options.refresh_seconds ?? 60)),
-    maxProjects: Number(options.max_projects ?? 3),
-  }
-}
-
 export const register: Register = (on, options) => {
-
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'pdca-tasks',
-      description: 'Mở pane theo dõi task PDCA (việc của tôi, và của nhóm nếu là trưởng phòng)',
+      description: 'Mở pane theo dõi task PDCA (nhân viên: việc của tôi; trưởng phòng: theo từng người)',
     })
     const config = await loadConfig($, options)
     if (config.token === '') {
@@ -194,67 +258,150 @@ export const register: Register = (on, options) => {
     const config = await loadConfig($, options)
     const state = await read($, view)
     const snapshot = state.snapshot
+    const refreshButton = (
+      <Button key="refresh" label="Làm mới" hotkey="r" onPress={() => refresh($, config)} />
+    )
 
     if (snapshot === null) {
       return (
         <Box flexDirection="column">
           <Text dimColor>{state.error === '' ? 'Đang tải task...' : `Lỗi: ${state.error}`}</Text>
-          <Button key="refresh" label="Làm mới" hotkey="r" onPress={() => refresh($, config)} />
+          {refreshButton}
         </Box>
       )
     }
 
     const today = todayBangkok(snapshot.fetchedAt)
-    const room = Math.max(4, (e.viewport?.rows ?? 24) - 6)
-    const rows = (items: TaskItem[], showAssignee: boolean) => {
-      const sorted = [...items].sort((a, b) => {
-        const byStatus = STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
-        return byStatus !== 0
-          ? byStatus
-          : (a.dueDate ?? '9999-12-31').localeCompare(b.dueDate ?? '9999-12-31')
-      })
-      return sorted.slice(0, room).map(task => {
-        const days = task.dueDate === null ? null : daysUntil(task.dueDate, today)
-        const isOverdue = days !== null && days < 0
-        const due =
-          task.dueDate === null
-            ? 'không hạn'
-            : isOverdue
-              ? `quá hạn ${-days} ngày`
-              : days === 0
-                ? 'hạn hôm nay'
-                : `hạn ${task.dueDate}`
-        const who = showAssignee && task.assignee ? ` · ${task.assignee}` : ''
-        return (
-          <Text color={isOverdue || task.status === 'blocked' ? 'red' : undefined}>
-            #{task.id} [{STATUS_LABEL[task.status] ?? task.status}] {task.title}
-            {who} — {due}
-          </Text>
-        )
-      })
+    const isTeam = TEAM_ROLES.includes(snapshot.role)
+    let budget = Math.max(6, (e.viewport?.rows ?? 24) - 8)
+
+    const row = (task: TaskItem, showStatus: boolean) => {
+      const due = dueInfo(task, today)
+      const color =
+        due.tone === 'bad' || task.status === 'blocked'
+          ? 'red'
+          : due.tone === 'warn'
+            ? 'yellow'
+            : undefined
+      const status = showStatus ? ` [${STATUS_LABEL[task.status] ?? task.status}]` : ''
+      return (
+        <Text color={color}>
+          #{task.id}
+          {status} {task.title} — {due.text}
+        </Text>
+      )
     }
 
-    return (
+    /** Vẽ tối đa `budget` dòng còn lại; phần thừa gom vào "và N việc nữa". */
+    const rows = (items: TaskItem[], showStatus: boolean) => {
+      const shown = items.slice(0, Math.max(0, budget))
+      budget -= shown.length
+      const hidden = items.length - shown.length
+      return (
+        <Box flexDirection="column">
+          {shown.map(task => row(task, showStatus))}
+          {hidden > 0 && <Text dimColor>…và {hidden} việc nữa</Text>}
+        </Box>
+      )
+    }
+
+    const footer = (
       <Box flexDirection="column">
-        <Text bold>Việc của tôi ({snapshot.mine.length})</Text>
-        {snapshot.mine.length === 0 && <Text dimColor>Không có việc đang mở.</Text>}
-        {rows(snapshot.mine, false)}
-        {snapshot.team.map(project => (
-          <Box flexDirection="column">
-            <Text bold>
-              Nhóm — {project.name} ({project.items.length})
-            </Text>
-            {project.items.length === 0 && <Text dimColor>Không có việc đang mở.</Text>}
-            {rows(project.items, true)}
-          </Box>
-        ))}
         <Text dimColor>
           {state.error === '' ? '' : `Lỗi lần làm mới gần nhất: ${state.error}. `}
           {state.isLoading
             ? 'Đang làm mới...'
             : `Cập nhật lúc ${timeBangkok(snapshot.fetchedAt)} (${snapshot.userName})`}
         </Text>
-        <Button key="refresh" label="Làm mới" hotkey="r" onPress={() => refresh($, config)} />
+        {refreshButton}
+      </Box>
+    )
+
+    if (!isTeam) {
+      // Mẫu A (nhân viên): chip số liệu, rồi Cần chú ý / Đang làm / Chưa làm.
+      const open = [...snapshot.tasks].sort(byDueDate)
+      const attention = open.filter(t => needsAttention(t, today))
+      const rest = open.filter(t => !needsAttention(t, today))
+      const doing = rest.filter(t => t.status === 'in_progress')
+      const todo = rest.filter(t => t.status !== 'in_progress')
+      const overdue = open.filter(t => isOverdue(t, today)).length
+      const blocked = open.filter(t => t.status === 'blocked').length
+      const dueToday = open.filter(t => t.dueDate === today).length
+
+      return (
+        <Box flexDirection="column">
+          <Text bold>Task PDCA — {snapshot.userName}</Text>
+          <Box>
+            <Text dimColor>{open.length} đang mở  </Text>
+            {overdue > 0 && <Text color="red">{overdue} quá hạn  </Text>}
+            {blocked > 0 && <Text color="red">{blocked} bị chặn  </Text>}
+            {dueToday > 0 && <Text color="yellow">{dueToday} hạn hôm nay</Text>}
+          </Box>
+          {open.length === 0 && <Text dimColor>Không có việc đang mở.</Text>}
+          {attention.length > 0 && <Text bold>Cần chú ý ({attention.length})</Text>}
+          {rows(attention, true)}
+          {doing.length > 0 && <Text bold>Đang làm ({doing.length})</Text>}
+          {rows(doing, false)}
+          {todo.length > 0 && <Text bold>Chưa làm ({todo.length})</Text>}
+          {rows(todo, false)}
+          {footer}
+        </Box>
+      )
+    }
+
+    // Mẫu B (trưởng phòng, giám đốc): mỗi người một khối kèm thanh tỷ lệ việc đã xong.
+    const groups = new Map<number, { name: string; items: TaskItem[] }>()
+    for (const task of snapshot.tasks) {
+      const group = groups.get(task.assigneeId) ?? {
+        name: task.assigneeId === snapshot.userId ? 'Tôi' : task.assignee,
+        items: [],
+      }
+      group.items.push(task)
+      groups.set(task.assigneeId, group)
+    }
+    const ordered = [...groups.entries()]
+      .map(([assigneeId, group]) => ({
+        assigneeId,
+        name: group.name,
+        items: [...group.items].sort(byDueDate),
+        isMe: assigneeId === snapshot.userId,
+      }))
+      .sort((a, b) => {
+        if (a.isMe !== b.isMe) return a.isMe ? 1 : -1
+        const aHot = a.items.some(t => needsAttention(t, today)) ? 0 : 1
+        const bHot = b.items.some(t => needsAttention(t, today)) ? 0 : 1
+        return aHot - bHot || a.name.localeCompare(b.name)
+      })
+    const overdueAll = snapshot.tasks.filter(t => isOverdue(t, today)).length
+    const blockedAll = snapshot.tasks.filter(t => t.status === 'blocked').length
+
+    return (
+      <Box flexDirection="column">
+        <Text bold>Task PDCA — nhóm</Text>
+        <Box>
+          <Text dimColor>{snapshot.tasks.length} đang mở  </Text>
+          {overdueAll > 0 && <Text color="red">{overdueAll} quá hạn  </Text>}
+          {blockedAll > 0 && <Text color="red">{blockedAll} bị chặn</Text>}
+        </Box>
+        {ordered.length === 0 && <Text dimColor>Không có việc đang mở.</Text>}
+        {ordered.map(group => {
+          const doneCount = snapshot.doneByUser[String(group.assigneeId)] ?? 0
+          const late = group.items.filter(t => isOverdue(t, today)).length
+          return (
+            <Box flexDirection="column">
+              <Text bold>
+                {group.name} · {group.items.length} việc
+                {late > 0 ? ` · ${late} quá hạn` : ''}
+              </Text>
+              <Text dimColor>
+                {progressBar(doneCount, group.items.length)} xong {doneCount}/
+                {doneCount + group.items.length}
+              </Text>
+              {rows(group.items, true)}
+            </Box>
+          )
+        })}
+        {footer}
       </Box>
     )
   })

@@ -3,7 +3,10 @@
 Mod (plugin hook của Claude Code) hiển thị task từ MCP Server PDCA ngay trong phiên:
 
 - **Dòng trạng thái**: `PDCA: 3 việc mở · 1 quá hạn · 1 bị chặn`, tự làm mới.
-- **Pane `/pdca-tasks`**: "Việc của tôi" (từ `get_my_tasks`); với trưởng phòng/giám đốc có thêm "Nhóm" theo project (từ `list_project_tasks`), đánh dấu việc quá hạn hoặc bị chặn. Phím `r` làm mới.
+- **Pane `/pdca-tasks`**, hai kiểu theo vai trò:
+  - **Nhân viên** (mẫu A): chip số liệu (đang mở, quá hạn, bị chặn, hạn hôm nay), rồi các nhóm "Cần chú ý", "Đang làm", "Chưa làm" (từ `get_my_tasks`).
+  - **Trưởng phòng, giám đốc** (mẫu B): mỗi người một khối kèm thanh tỷ lệ việc đã xong (từ `list_project_tasks` và `get_my_tasks`); người có việc cần chú ý xếp trước, "Tôi" xếp cuối.
+  Việc quá hạn hoặc bị chặn hiện màu đỏ, đến hạn hôm nay màu vàng. Phím `r` làm mới.
 
 Mod chỉ **đọc** (không đổi trạng thái, không giao việc) và dùng đúng token của bạn nên chỉ thấy dữ liệu trong phạm vi quyền.
 

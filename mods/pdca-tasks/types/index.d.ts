@@ -4,17 +4,19 @@ export type TaskItem = {
   status: string
   dueDate: string | null
   projectId: number
-  assignee?: string
+  assigneeId: number
+  assignee: string
 }
-
-export type ProjectTasks = { projectId: number; name: string; items: TaskItem[] }
 
 export type Snapshot = {
   /** Vai trò của người dùng (staff | dept_head | director | admin). */
   role: string
+  userId: number
   userName: string
-  mine: TaskItem[]
-  team: ProjectTasks[]
+  /** Task đang mở: của tôi, và của cả nhóm nếu là trưởng phòng/giám đốc (đã khử trùng theo id). */
+  tasks: TaskItem[]
+  /** Số task đã xong theo người thực hiện (khóa là user_id), chỉ có ở vai trò quản lý. */
+  doneByUser: Record<string, number>
   /** Thời điểm lấy dữ liệu, ms kể từ epoch. */
   fetchedAt: number
 }
