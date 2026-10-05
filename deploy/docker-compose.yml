@@ -5,8 +5,9 @@
 #   docker compose -f deploy/docker-compose.yml --profile apps up -d --build
 # Profile "apps": mcp + scheduler. Profile "caddy": thêm Caddy (TLS tự động) khi máy
 # chủ không có reverse proxy sẵn; máy chủ đã có nginx thì trỏ nginx vào MCP_HTTP_PORT.
-# Profile "workers": agent
-# (chưa có entrypoint — chờ nhận trả lời). Profile "mail": Mailpit — SMTP giả
+# Profile "workers": agent. CHƯA DÙNG ĐƯỢC: `apps.agent_service` chưa có entrypoint
+# (chờ nhận + phân tích trả lời, OI-04), bật profile này sẽ báo lỗi ngay. Không có trong
+# `--profile apps` nên triển khai bình thường không bị ảnh hưởng. Profile "mail": Mailpit — SMTP giả
 # cho dev, xem thư ở http://localhost:8025 (đặt CHANNEL_KIND=email, SMTP_HOST=mailpit,
 # SMTP_PORT=1025, SMTP_SECURITY=none).
 # Triển khai lên máy chủ và nối Claude Code: deploy/README.md.
@@ -90,6 +91,9 @@ services:
       - "127.0.0.1:${MCP_HTTP_PORT:-8010}:8000"
 
   agent:
+    # CHƯA DÙNG ĐƯỢC: thiếu src/apps/agent_service/__main__.py (xem ghi chú đầu tệp).
+    # Giữ khung này để khi có Agent Service chỉ cần thêm entrypoint; đừng bật profile
+    # `workers` trước đó.
     <<: *app
     profiles: [workers]
     command: ["python", "-m", "apps.agent_service"]
