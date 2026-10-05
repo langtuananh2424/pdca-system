@@ -26,7 +26,7 @@ setx PDCA_TOKEN "pdca_..."
 2. **Từ thư mục**: `claude --plugin-dir mods/pdca-tasks` (terminal) mỗi lần khởi động.
 3. **Cài lâu dài qua marketplace của repo** (sau khi nhánh có `mods/pdca-tasks` được merge và repo đã clone): trong Claude Code gõ `/plugin marketplace add <đường dẫn repo>` rồi `/plugin install pdca-tasks@pdca-system`.
 
-Sau khi nạp, gõ `/pdca-tasks` để mở pane; dòng trạng thái tự hiện.
+Sau khi nạp, pane tự mở khi bắt đầu phiên nếu cửa sổ đủ rộng (hẹp hơn thì chờ tới khi đủ rộng); gõ `/pdca-tasks` để mở lại thủ công. Tắt tự mở bằng biến môi trường `PDCA_AUTO_OPEN=0` hoặc tùy chọn `auto_open` của plugin. Dòng trạng thái luôn tự hiện.
 
 Kiểm tra mod: `claude plugin validate mods/pdca-tasks`.
 

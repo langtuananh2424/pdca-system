@@ -24,6 +24,12 @@
       "description": "Tối thiểu 15",
       "default": 60
     },
+    "auto_open": {
+      "type": "boolean",
+      "title": "Tự mở pane khi bắt đầu phiên",
+      "description": "Pane chỉ hiện khi cửa sổ đủ rộng; đặt biến môi trường PDCA_AUTO_OPEN=0 để tắt",
+      "default": true
+    },
     "max_projects": {
       "type": "number",
       "title": "Số project nhóm hiển thị tối đa",

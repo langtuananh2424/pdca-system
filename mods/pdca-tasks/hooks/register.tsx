@@ -19,7 +19,13 @@ const STATUS_LABEL: Record<string, string> = {
 const BAR_CELLS = 8
 
 type Json = Record<string, any>
-type Config = { url: string; token: string; seconds: number; maxProjects: number }
+type Config = {
+  url: string
+  token: string
+  seconds: number
+  maxProjects: number
+  autoOpen: boolean
+}
 type Due = { text: string; tone: 'bad' | 'warn' | 'normal' }
 
 /** Gọi một tool của PDCA MCP Server (JSON-RPC qua HTTP, token Bearer). */
@@ -199,11 +205,13 @@ function summary(snapshot: Snapshot, today: string): string {
 async function loadConfig($: EngineInterface, options: PluginOptions): Promise<Config> {
   const envToken = await $.env.get('PDCA_TOKEN')
   const envUrl = await $.env.get('PDCA_SERVER_URL')
+  const envAutoOpen = await $.env.get('PDCA_AUTO_OPEN')
   return {
     url: String(options.server_url || envUrl || 'http://localhost:8010/mcp'),
     token: String(options.api_token || envToken || ''),
     seconds: Math.max(MIN_REFRESH_SECONDS, Number(options.refresh_seconds ?? 60)),
     maxProjects: Number(options.max_projects ?? 3),
+    autoOpen: options.auto_open !== false && envAutoOpen !== '0',
   }
 }
 
@@ -233,6 +241,10 @@ export const register: Register = (on, options) => {
     } else {
       void refresh($, config)
       $.clock.every(config.seconds * 1000, () => void refresh($, config))
+      if (config.autoOpen) {
+        // Mở không do người dùng yêu cầu: chỉ vào chỗ khi cửa sổ đủ rộng, hẹp hơn thì chờ.
+        void $.ui.open({ id: PANE, title: 'Task PDCA' })
+      }
     }
 
     return next(e)
