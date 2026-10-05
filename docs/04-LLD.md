@@ -997,8 +997,9 @@ Bản cục bộ đã cài đặt: `deploy/docker-compose.yml`. Lệch so với 
 Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <tên miền>` sinh `deploy/.env` (mật khẩu ngẫu nhiên, `--no-seed` bỏ dữ liệu mẫu); Caddy mở cổng 80 (Let's Encrypt HTTP-01, chuyển hướng) và 443; `PDCA_DOMAIN` vừa là tên miền chứng chỉ vừa là `MCP_ALLOWED_HOSTS`. Các bước và lệnh `claude mcp add`: `deploy/README.md`.
 
 ### 9.2 Sao lưu và khôi phục
-- `pg_dump` hằng ngày (cron), mã hóa, lưu ngoài máy chủ; giữ 30 bản ngày + 12 bản tháng (cấu hình được).
-- Kiểm thử khôi phục mỗi quý trên môi trường staging (NFR-REL-02).
+- `pg_dump -Fc` hằng ngày bằng systemd timer, kiểm tra đọc được và có bảng cốt lõi, ghi SHA-256; giữ 7 bản ngày, 4 bản tuần, 6 bản tháng (cấu hình bằng `PDCA_BACKUP_*`). Đã cài đặt: `deploy/backup/` (`backup-db.sh`, `restore-db.sh`, hướng dẫn trong `deploy/backup/README.md`).
+- **Chưa làm**: bản sao ngoài máy chủ (mã hóa trước khi gửi), cảnh báo khi backup lỗi, khôi phục theo thời điểm; hiện bản sao cùng ổ đĩa với DB.
+- Kiểm thử khôi phục mỗi quý (NFR-REL-02): `restore-db.sh <tệp> --verify` dựng container tạm, không đụng DB thật; `--live --yes` khôi phục thật và tự sao lưu DB hiện tại trước.
 
 ### 9.3 Quan sát
 - Log JSON với `request_id`, `user_id`, `tool`, `latency_ms`, `result`.

@@ -1,0 +1,11 @@
+[Unit]
+Description=Sao luu PostgreSQL cua PDCA hang ngay
+
+[Timer]
+# Cach lich backup cua cac du an khac tren cung may chu (02:30, 03:15).
+OnCalendar=*-*-* 03:45:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target
