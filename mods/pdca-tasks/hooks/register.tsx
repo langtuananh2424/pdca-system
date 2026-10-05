@@ -161,7 +161,7 @@ export const register: Register = (on, options) => {
     })
     const config = await loadConfig($, options)
     if (config.token === '') {
-      $.ui.toast('pdca-tasks: chưa có API token (biến môi trường PDCA_TOKEN hoặc cấu hình plugin)')
+      $.ui.toast('Chưa có API token PDCA (biến môi trường PDCA_TOKEN hoặc cấu hình plugin)')
     } else {
       void refresh($, config)
       $.clock.every(config.seconds * 1000, () => void refresh($, config))
