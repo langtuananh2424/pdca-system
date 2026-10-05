@@ -142,7 +142,21 @@ Kết quả đúng chứa `"name": "Nhân viên A1"`. Thiếu hoặc sai token t
 
 ## 4. Nối Claude Code
 
-Cách nhanh để thử (lưu cấu hình cho thư mục hiện tại):
+**Dùng script (Windows, khuyến nghị):** `scripts\dev\connect-server.ps1` kiểm tra máy chủ trả lời, hỏi token bằng ô nhập ẩn (không hiện ra màn hình, không vào lịch sử lệnh), gọi thử `whoami` để chắc token đúng rồi mới đăng ký. Mặc định nối tới `https://pdca.ppsvietnam.edu.vn/mcp`; đổi bằng `-Url`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev\connect-server.ps1 -CheckOnly   # chỉ kiểm tra máy chủ
+powershell -ExecutionPolicy Bypass -File scripts\dev\connect-server.ps1               # cài plugin pdca (người dùng thường)
+powershell -ExecutionPolicy Bypass -File scripts\dev\connect-server.ps1 -Mode Mcp -Mod # chỉ MCP + mod pdca-tasks (người phát triển)
+powershell -ExecutionPolicy Bypass -File scripts\dev\connect-server.ps1 -Remove       # gỡ đăng ký
+```
+
+- `-Mode Plugin` (mặc định): thêm marketplace `langtuananh2424/pdca-system`, cài `pdca@pdca-system`, lưu `server_url`, `department`, `api_token` vào cấu hình plugin (token trong kho bí mật của máy, không nằm trên dòng lệnh). Cần `-Department` đúng một phòng có rule (hiện chỉ `thu-nghiem-a`).
+- `-Mode Mcp`: chỉ `claude mcp add` (tên `pdca-server`, đổi bằng `-Name`, phạm vi `-Scope`); token nằm dạng chữ thường trong `~/.claude.json`.
+- `-Mod`: đặt biến môi trường người dùng `PDCA_TOKEN`, `PDCA_SERVER_URL`, `CLAUDE_CODE_PLUGIN_DIRS` để mod `mods/pdca-tasks` trỏ tới máy chủ; hỏi trước khi ghi đè `PDCA_TOKEN` đang có (có thể là token local).
+- `-DryRun` chỉ in các bước. Token do quản trị cấp (hiện chưa có giao diện tạo người dùng; xem mục 6).
+
+**Làm tay:** cách nhanh để thử (lưu cấu hình cho thư mục hiện tại):
 
 ```bash
 claude mcp add --transport http pdca https://pdca.congty.vn/mcp \
