@@ -14,6 +14,7 @@ from pdca_core.errors import ForbiddenOrNotFound
 class Action(StrEnum):
     TASK_READ_OWN = "task.read.own"
     TASK_UPDATE_OWN = "task.update.own"
+    TASK_READ_TEAM = "task.read.team"
     TASK_CREATE = "task.create"
     TASK_ASSIGN = "task.assign"
     REPORT_SUBMIT_OWN = "report.submit.own"
@@ -50,6 +51,7 @@ _OWN_HEADS = {Role.DEPT_HEAD: Scope.OWN, Role.DIRECTOR: Scope.OWN}
 MATRIX: dict[Action, dict[Role, Scope]] = {
     Action.TASK_READ_OWN: _OWN_STAFF_UP,
     Action.TASK_UPDATE_OWN: _OWN_STAFF_UP,
+    Action.TASK_READ_TEAM: _TEAM,
     Action.TASK_CREATE: _TEAM,
     Action.TASK_ASSIGN: _TEAM,
     Action.REPORT_SUBMIT_OWN: _OWN_STAFF_UP,

@@ -16,6 +16,7 @@ from pdca_core.errors import ForbiddenOrNotFound
 LLD_3_2: dict[str, tuple[str, str, str, str]] = {
     "task.read.own":      ("own",     "own",     "own",    "-"),
     "task.update.own":    ("own",     "own",     "own",    "-"),
+    "task.read.team":     ("-",       "dept",    "all",    "-"),
     "task.create":        ("-",       "dept",    "all",    "-"),
     "task.assign":        ("-",       "dept",    "all",    "-"),
     "report.submit.own":  ("own",     "own",     "own",    "-"),

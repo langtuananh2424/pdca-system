@@ -18,7 +18,7 @@ chung code, quy ước hay migration.
   toán `can`, ghép rule, idempotency job (4.11).
 - `docs/04-LLD.md` — **nguồn chính khi code**: DDL (mục 2), token + ma trận
   quyền chi tiết (mục 3), đặc tả từng MCP tool (mục 4), job/agent (5), plugin
-  (7), biến môi trường (8), ca kiểm thử T-01..T-18 (10), lộ trình P1 (12).
+  (7), biến môi trường (8), ca kiểm thử T-01..T-24 (10), lộ trình P1 (12).
 
 Khi implement một tool/job: đọc đúng mục LLD tương ứng, dùng đúng tên bảng,
 cột, trạng thái, mã lỗi đã thiết kế — không tự đặt lại. Nếu cần lệch thiết
@@ -44,6 +44,7 @@ src/apps/       mcp_server scheduler admin_cli (đã có); agent_service dashboa
 src/config/
 rules/          rule công ty/phòng ban (Markdown + YAML front matter)
 plugin/         plugin Claude Code: skill chot-ngay, hook rule, .mcp.json (rules/ trong đó là tệp sinh)
+mods/           mod Claude Code (hook + pane), ví dụ pdca-tasks: theo dõi task trong phiên (chỉ đọc)
 tests/          unit integration permission_matrix
 deploy/         docker-compose, Dockerfile, Caddyfile
 ```
@@ -136,6 +137,10 @@ lời (Agent Service, cần chốt LLM — OI-04).
 LLD 4.2), `pdca_core/questions`, job `question_expire` trong scheduler, skill
 `/pdca:hoi-cap-tren`, `/pdca:cau-hoi-den-toi`. Agent soạn nháp (FR-ASK-09..11) là P2. Người nhận do `resolve_recipient` chọn: trưởng
 phòng trực thuộc, hoặc cấp kế tiếp khi vị trí đó trống (OI-11 đã chốt hướng này).
+
+Tra cứu cho trưởng phòng (LLD 4.2): tool `list_project_tasks` (hành động mới `task.read.team`) và
+`list_project_members`, mod `mods/pdca-tasks` (pane `/pdca-tasks` + dòng trạng thái), skill `/pdca:bat-dau` (chỉ đọc, dựng lại ngữ cảnh đầu phiên), rule
+`tra-cuu-truoc-khi-ghi` (thiếu mã thì tra bằng tool, không đoán). Server có 21 tool.
 
 Thiết kế v0.2 (hai cửa vào + registry tool `pdca_core.tools`, web chat, phiên đăng nhập,
 ADR-015) **chưa cài đặt**; code hiện tại là cửa MCP thuần (v0.1). Lệch hiện trạng cần

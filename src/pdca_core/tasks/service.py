@@ -65,6 +65,60 @@ def list_mine(
     }
 
 
+def list_project_tasks(
+    ctx: UserContext,
+    pool: ConnectionPool,
+    *,
+    project_id: int,
+    status: str | None = None,
+    assignee_id: int | None = None,
+    limit: int | None = None,
+    cursor: str | None = None,
+) -> dict[str, Any]:
+    """Task của mọi người trong một project (FR-TASK-02, UC-10). Quyền `task.read.team`.
+
+    `assignee_id` chỉ là bộ lọc theo đối tượng, không xác định người gọi (FR-AUTH-02).
+    Mặc định các trạng thái mở.
+    """
+    statuses = (choice("status", status, LISTABLE_STATUSES),) if status else OPEN_STATUSES
+    size = page_limit(limit)
+    after = _decode_task_cursor(cursor) if cursor else None
+
+    with pool.connection() as conn:
+        project = plan_repo.project_scope(conn, project_id)
+        if project is None:
+            raise ForbiddenOrNotFound()
+        require(
+            ctx,
+            Action.TASK_READ_TEAM,
+            Resource(project_id=project_id, department_id=project.department_id),
+        )
+        rows = repo.list_for_project(conn, project_id, statuses, assignee_id, after, size + 1)
+
+    page = rows[:size]
+    next_cursor = None
+    if len(rows) > size:
+        last = page[-1]
+        next_cursor = encode_cursor([last.due_date.isoformat() if last.due_date else None, last.id])
+    return {
+        "project_id": project_id,
+        "items": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "assignee_id": t.assignee_id,
+                "assignee_name": t.assignee_name,
+                "plan_id": t.plan_id,
+                "due_date": t.due_date.isoformat() if t.due_date else None,
+                "status": t.status,
+                "updated_at": t.updated_at.isoformat(),
+            }
+            for t in page
+        ],
+        "next_cursor": next_cursor,
+    }
+
+
 def update_status(
     ctx: UserContext,
     pool: ConnectionPool,
