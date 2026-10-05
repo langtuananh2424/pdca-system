@@ -7,13 +7,23 @@ Mod (plugin hook của Claude Code) hiển thị task từ MCP Server PDCA ngay 
 
 Mod chỉ **đọc** (không đổi trạng thái, không giao việc) và dùng đúng token của bạn nên chỉ thấy dữ liệu trong phạm vi quyền.
 
-## Dùng thử
+## Cấu hình token
 
-```bash
-claude --plugin-dir mods/pdca-tasks
+Mod đọc cấu hình theo thứ tự: `userConfig` của plugin (`server_url`, `api_token`, `refresh_seconds`, `max_projects`), rồi biến môi trường `PDCA_SERVER_URL`, `PDCA_TOKEN`, rồi mặc định `http://localhost:8010/mcp`. Trên app desktop, cách chắc nhất là đặt biến môi trường người dùng rồi **khởi động lại app**:
+
+```powershell
+setx PDCA_TOKEN "pdca_..."
 ```
 
-Trong phiên, mở `/config`, đặt cho `pdca-tasks`: `server_url` (mặc định `http://localhost:8010/mcp`), `api_token` (token `pdca_...`, lưu trong kho bí mật của máy), tùy chọn `refresh_seconds` (tối thiểu 15) và `max_projects`. Rồi gõ `/pdca-tasks`.
+(Token chỉ nằm trên máy bạn; đừng commit.) Mod chỉ dùng token đó để gọi `get_my_tasks`, `list_project_tasks` và `whoami`.
+
+## Cài mod
+
+1. **Thử trong phiên hiện tại (hot reload)**: đặt thư mục mod trong thư mục mod của phiên, Claude Code hỏi "Enable hot reloading for this session?" → chọn *Enable for this session*. Mod nạp ngay và tự nạp lại khi sửa tệp. Chỉ có hiệu lực cho phiên đó.
+2. **Từ thư mục**: `claude --plugin-dir mods/pdca-tasks` (terminal) mỗi lần khởi động.
+3. **Cài lâu dài qua marketplace của repo** (sau khi nhánh có `mods/pdca-tasks` được merge và repo đã clone): trong Claude Code gõ `/plugin marketplace add <đường dẫn repo>` rồi `/plugin install pdca-tasks@pdca-system`.
+
+Sau khi nạp, gõ `/pdca-tasks` để mở pane; dòng trạng thái tự hiện.
 
 Kiểm tra mod: `claude plugin validate mods/pdca-tasks`.
 

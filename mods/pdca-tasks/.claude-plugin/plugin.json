@@ -8,14 +8,14 @@
     "server_url": {
       "type": "string",
       "title": "Địa chỉ MCP Server PDCA",
-      "description": "URL endpoint /mcp, ví dụ http://localhost:8010/mcp",
-      "default": "http://localhost:8010/mcp"
+      "description": "URL endpoint /mcp, ví dụ http://localhost:8010/mcp; để trống thì dùng PDCA_SERVER_URL hoặc mặc định",
+      "default": ""
     },
     "api_token": {
       "type": "string",
       "title": "API token PDCA",
-      "description": "Token cá nhân (bắt đầu bằng pdca_); lưu trong kho bí mật của máy",
-      "required": true,
+      "description": "Token cá nhân (bắt đầu bằng pdca_); để trống thì dùng biến môi trường PDCA_TOKEN",
+      "default": "",
       "sensitive": true
     },
     "refresh_seconds": {

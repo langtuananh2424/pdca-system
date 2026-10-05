@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
 import type { ProjectTasks, Snapshot, TaskItem, View } from '../types'
 
@@ -140,22 +140,28 @@ async function refresh($: EngineInterface, config: Config): Promise<void> {
   }
 }
 
-export const register: Register = (on, options) => {
-  const config: Config = {
-    url: String(options.server_url ?? 'http://localhost:8010/mcp'),
-    token: String(options.api_token ?? ''),
+/** Cấu hình từ `userConfig`; thiếu token/URL thì lấy từ biến môi trường PDCA_TOKEN, PDCA_SERVER_URL. */
+async function loadConfig($: EngineInterface, options: PluginOptions): Promise<Config> {
+  const envToken = await $.env.get('PDCA_TOKEN')
+  const envUrl = await $.env.get('PDCA_SERVER_URL')
+  return {
+    url: String(options.server_url || envUrl || 'http://localhost:8010/mcp'),
+    token: String(options.api_token || envToken || ''),
     seconds: Math.max(MIN_REFRESH_SECONDS, Number(options.refresh_seconds ?? 60)),
     maxProjects: Number(options.max_projects ?? 3),
   }
-  const hasToken = config.token !== ''
+}
+
+export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'pdca-tasks',
       description: 'Mở pane theo dõi task PDCA (việc của tôi, và của nhóm nếu là trưởng phòng)',
     })
-    if (!hasToken) {
-      $.ui.toast('pdca-tasks: chưa có API token, đặt trong /config')
+    const config = await loadConfig($, options)
+    if (config.token === '') {
+      $.ui.toast('pdca-tasks: chưa có API token (biến môi trường PDCA_TOKEN hoặc cấu hình plugin)')
     } else {
       void refresh($, config)
       $.clock.every(config.seconds * 1000, () => void refresh($, config))
@@ -165,16 +171,23 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'pdca-tasks' }, async $ => {
+    const config = await loadConfig($, options)
     await $.ui.open({ id: PANE, title: 'Task PDCA' })
-    if (hasToken) {
+    if (config.token !== '') {
       void refresh($, config)
     }
 
-    return { text: hasToken ? 'Đã mở pane task PDCA.' : 'Chưa có API token PDCA (đặt trong /config).' }
+    return {
+      text:
+        config.token !== ''
+          ? 'Đã mở pane task PDCA.'
+          : 'Chưa có API token PDCA (biến môi trường PDCA_TOKEN hoặc cấu hình plugin).',
+    }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
+    const config = await loadConfig($, options)
     const state = await read($, view)
     const snapshot = state.snapshot
 
