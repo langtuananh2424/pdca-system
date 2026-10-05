@@ -124,6 +124,54 @@ def build_server(deps: ToolDeps) -> MCPServer:
             ),
         )
 
+    @mcp.tool(annotations=_READ_ONLY)
+    async def list_project_tasks(
+        ctx: Context,
+        project_id: int,
+        status: str | None = None,
+        assignee_id: int | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """Task của mọi người trong một project (trưởng phòng, giám đốc) để tra task_id.
+
+        status: todo | in_progress | blocked | done (mặc định các trạng thái mở).
+        assignee_id: chỉ lọc theo người thực hiện (không phải danh tính người gọi).
+        """
+        params = {
+            "project_id": project_id,
+            "status": status,
+            "assignee_id": assignee_id,
+            "limit": limit,
+            "cursor": cursor,
+        }
+        return await call(
+            "list_project_tasks",
+            params,
+            ctx,
+            lambda u: task_service.list_project_tasks(
+                u,
+                deps.pool,
+                project_id=project_id,
+                status=status,
+                assignee_id=assignee_id,
+                limit=limit,
+                cursor=cursor,
+            ),
+        )
+
+    @mcp.tool(annotations=_READ_ONLY)
+    async def list_project_members(ctx: Context, project_id: int) -> dict[str, Any]:
+        """Thành viên đang hoạt động của một project (user_id, tên, vai trò) để tra
+        assignee_id từ tên. Thành viên project, trưởng phòng của phòng chứa project
+        hoặc giám đốc mới xem được."""
+        return await call(
+            "list_project_members",
+            {"project_id": project_id},
+            ctx,
+            lambda u: org_service.project_members(u, deps.pool, project_id=project_id),
+        )
+
     @mcp.tool(annotations=_WRITE)
     async def update_task_status(
         ctx: Context, task_id: int, status: str, note: str | None = None

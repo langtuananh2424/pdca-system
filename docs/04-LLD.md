@@ -410,6 +410,7 @@ def authenticate(token: str, repo, request_id: str) -> UserContext:
 |---|---|---|---|---|
 | `task.read.own` | ✓ | ✓ | ✓ | |
 | `task.update.own` | ✓ | ✓ | ✓ | |
+| `task.read.team` | | trong phòng | ✓ | |
 | `task.create` / `task.assign` | | trong phòng | ✓ | |
 | `report.submit.own` | ✓ | ✓ | ✓ | |
 | `report.read.own` | ✓ | ✓ | ✓ | |
@@ -547,6 +548,12 @@ Tool định nghĩa trong registry (mục 3.4). Cửa MCP: `MCPServer("pdca")`, 
 - `create_task`: `project_id`, `title`, `assignee_id`, `plan_id?`, `due_date?`, `detail?`.
 - `assign_task`: `task_id`, `assignee_id` (phải là thành viên project).
 - Quyền: `task.create` / `task.assign`.
+
+#### `list_project_tasks` / `list_project_members`
+Để trưởng phòng tra `task_id`, `assignee_id` từ tiêu đề hoặc tên thay vì nhớ mã giữa các phiên (máy chủ không lưu hội thoại).
+- `list_project_tasks`: `project_id`, `status?: "todo"|"in_progress"|"blocked"|"done"` (mặc định các trạng thái mở), `assignee_id?` (chỉ là bộ lọc theo đối tượng), `limit?`, `cursor?`. Đầu ra: `{project_id, items: [{id, title, assignee_id, assignee_name, plan_id, due_date, status, updated_at}], next_cursor}`, sắp theo hạn (không hạn xếp cuối) rồi id, phân trang keyset như `get_my_tasks`. Quyền: `task.read.team` trên `Resource(project_id, department_id)` của project (trưởng phòng trong phòng, giám đốc); nhân viên chỉ xem task của mình qua `get_my_tasks`.
+- `list_project_members`: `project_id`. Đầu ra: `{project: {id, status}, members: [{user_id, name, role, project_role}]}`, chỉ thành viên đang hoạt động (không khóa, không xóa mềm), trưởng nhóm (`lead`) xếp trước, tối đa 100 dòng; không có email hay trạng thái nghỉ phép. Quyền: thành viên project, hoặc `task.read.team` trên project (cùng phạm vi `get_project_status`).
+- Project không tồn tại hoặc ngoài phạm vi → `forbidden_or_not_found` (không phân biệt). Ghi chú cài đặt: hàm `tasks.service.list_project_tasks`, `org.service.project_members`; ca kiểm thử `tests/integration/test_project_listing_tools.py` và dòng `list_project_*` trong `test_tools_matrix.py`, `task.read.team` trong `test_can_matrix.py`; T-23, T-24.
 
 #### `ask_superior` / `get_my_questions` / `answer_question` / `cancel_question`
 - `ask_superior`: `body` (≤ 2000), `project_id?`, `task_id?`. **Không có tham số người nhận**: người nhận do `resolve_recipient(người gọi)` chọn (FR-ASK-02, bất biến 3), theo thứ tự:
@@ -836,6 +843,7 @@ plugin/
 ├─ skills/
 │  ├─ chot-ngay/SKILL.md        # /pdca:chot-ngay
 │  ├─ viec-cua-toi/SKILL.md     # /pdca:viec-cua-toi
+│  ├─ bat-dau/SKILL.md          # /pdca:bat-dau — dựng lại ngữ cảnh đầu phiên (chỉ đọc)
 │  ├─ hoi-cap-tren/SKILL.md     # /pdca:hoi-cap-tren (FR-ASK, P1) — gọi ask_superior
 │  └─ cau-hoi-den-toi/SKILL.md  # /pdca:cau-hoi-den-toi — xem và trả lời câu hỏi nhận được; hỏi xác nhận trước answer_question
 └─ README.md
@@ -888,6 +896,7 @@ plugin/
 ├─ rules/_company.md, <phòng>.md    # sinh bởi `pdca-admin rules build` từ rules/
 ├─ skills/chot-ngay/SKILL.md        # /pdca:chot-ngay
 ├─ skills/viec-cua-toi/SKILL.md     # /pdca:viec-cua-toi
+├─ skills/bat-dau/SKILL.md          # /pdca:bat-dau
 ├─ skills/hoi-cap-tren/SKILL.md     # /pdca:hoi-cap-tren
 ├─ skills/cau-hoi-den-toi/SKILL.md  # /pdca:cau-hoi-den-toi
 └─ README.md
@@ -1032,6 +1041,8 @@ Triển khai lên máy chủ thử: cùng tệp Compose; `deploy/init-env.sh <t�
 | T-17 | Trưởng phòng trực thuộc bị khóa (hoặc vị trí trống); nhân viên gọi `ask_superior`, rồi trưởng phòng được mở khóa và nhân viên hỏi thêm một câu | Câu đầu tới cấp kế tiếp (vượt cấp) và giữ nguyên người nhận; câu sau tới trưởng phòng | AC-09, FR-ASK-02 |
 | T-17b | Trưởng phòng trực thuộc có `away_until` ≥ hôm nay; nhân viên gọi `ask_superior` | Câu hỏi vẫn tới trưởng phòng (không vượt cấp) | FR-ASK-02 |
 | T-18 | Chuỗi `manager_id` đứt (không có `manager_id`, trỏ sai vai trò, giám đốc ở bước thứ 4) hoặc người gọi là giám đốc không có cấp trên — kể cả khi chỉ còn một giám đốc hoạt động | `invalid_argument`, không tạo câu hỏi | FR-ASK-02 |
+| T-23 | Trưởng phòng/giám đốc gọi `list_project_tasks`; nhân viên cùng project và trưởng phòng khác phòng gọi cùng tool | Trưởng phòng/giám đốc thấy task của mọi thành viên (mặc định chỉ trạng thái mở); hai người kia nhận `forbidden_or_not_found` và có bản ghi audit `denied` | FR-TASK-02, AC-01 |
+| T-24 | Người ngoài project gọi `list_project_members`; gọi với project không tồn tại | Cùng mã `forbidden_or_not_found`; thành viên khóa hoặc xóa mềm không xuất hiện trong danh sách; không lộ email | FR-ORG-03, AC-01 |
 | T-19 | Cùng người dùng gọi cùng tool qua MCP và qua web chat | Cùng kết quả, cùng mã lỗi khi bị từ chối; audit ghi đúng `actor_kind` | FR-AUTH-07 |
 | T-20 | Gọi `submit_report` qua MCP rồi chạy tổng hợp phòng | Báo cáo ở `draft_by_agent`, không xuất hiện trong tổng hợp đến khi người dùng bấm Duyệt trên web | FR-CHK-02, AC-06 |
 | T-21 | Bật giả lập người dùng khi `PDCA_ENV=staging` | Server từ chối, ghi audit `denied` | FR-AUTH-08 |

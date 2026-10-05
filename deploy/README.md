@@ -40,6 +40,16 @@ tài khoản riêng chỉ sở hữu `/opt/pdca-system` và thư mục runner. N
 `production` cho nhánh `main`, đặt người duyệt bắt buộc (Required reviewers) và duyệt tay PR từ
 fork. Khi chưa cần tự động, triển khai tay (mục 5) là lựa chọn an toàn hơn cho giai đoạn pilot.
 
+## Chạy thử trên máy cá nhân (Windows)
+
+Một lệnh dựng stack local, cấp token mẫu (không in ra màn hình), đăng ký MCP cho Claude Code và cấu hình mod `mods/pdca-tasks`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\dev\setup-local.ps1
+```
+
+Cần Docker Desktop và Claude Code CLI (`claude`). Script tạo `deploy\.env` với mật khẩu ngẫu nhiên và cổng DB/MCP còn trống, chạy lại an toàn (bước nào xong thì bỏ qua). Cờ: `-DryRun` chỉ in các bước, `-Down` tắt stack, `-Reset` xóa dữ liệu rồi nạp lại seed, `-Force` cấp lại token và ghi đè cấu hình, `-NoTokens`/`-NoMcp`/`-NoMod` bỏ từng phần, `-HeadEmail`/`-StaffEmail` đổi tài khoản mẫu. Xong thì tắt hẳn app Claude, mở lại và gõ `/pdca-tasks`.
+
 ## 1. Chuẩn bị máy chủ
 
 - Linux có Docker Engine và plugin Compose v2 (`docker compose version`).
@@ -140,7 +150,7 @@ claude mcp add --transport http pdca https://pdca.congty.vn/mcp \
 claude mcp list          # pdca: ... (HTTP) - √ Connected
 ```
 
-Trong phiên Claude Code: `/mcp` thấy server `pdca` với 19 tool; thử hỏi
+Trong phiên Claude Code: `/mcp` thấy server `pdca` với 21 tool; thử hỏi
 "gọi tool whoami của pdca" hoặc "việc của tôi hôm nay".
 
 Lệnh trên lưu token dạng rõ trong `~/.claude.json`, chỉ nên dùng để thử. Cho

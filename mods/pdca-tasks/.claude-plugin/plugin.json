@@ -1,0 +1,40 @@
+{
+  "name": "pdca-tasks",
+  "version": "0.1.0",
+  "author": { "name": "Lăng Tuấn Anh" },
+  "description": "Pane và dòng trạng thái theo dõi task PDCA của bạn (và của nhóm nếu là trưởng phòng)",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "server_url": {
+      "type": "string",
+      "title": "Địa chỉ MCP Server PDCA",
+      "description": "URL endpoint /mcp, ví dụ http://localhost:8010/mcp; để trống thì dùng PDCA_SERVER_URL hoặc mặc định",
+      "default": ""
+    },
+    "api_token": {
+      "type": "string",
+      "title": "API token PDCA",
+      "description": "Token cá nhân (bắt đầu bằng pdca_); để trống thì dùng biến môi trường PDCA_TOKEN",
+      "default": "",
+      "sensitive": true
+    },
+    "refresh_seconds": {
+      "type": "number",
+      "title": "Chu kỳ làm mới (giây)",
+      "description": "Tối thiểu 15",
+      "default": 60
+    },
+    "auto_open": {
+      "type": "boolean",
+      "title": "Tự mở pane khi bắt đầu phiên",
+      "description": "Pane chỉ hiện khi cửa sổ đủ rộng; đặt biến môi trường PDCA_AUTO_OPEN=0 để tắt",
+      "default": true
+    },
+    "max_projects": {
+      "type": "number",
+      "title": "Số project nhóm hiển thị tối đa",
+      "description": "Chỉ áp dụng cho trưởng phòng/giám đốc",
+      "default": 3
+    }
+  }
+}
